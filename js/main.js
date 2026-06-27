@@ -488,7 +488,9 @@ function initCarousel() {
 
 function goToSlide(idx) {
   carouselIndex = (idx + carouselTotal) % carouselTotal;
-  document.getElementById('carousel-track').style.transform = `translateX(-${carouselIndex * 100}%)`;
+  const track = document.getElementById('carousel-track');
+  const slideWidth = track.parentElement.offsetWidth;
+  track.style.transform = `translateX(-${carouselIndex * slideWidth}px)`;
   document.querySelectorAll('.carousel-dot').forEach((d, i) => d.classList.toggle('active', i === carouselIndex));
 }
 
