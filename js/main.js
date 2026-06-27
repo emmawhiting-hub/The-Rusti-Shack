@@ -473,7 +473,7 @@ function closeModal() {
 let carouselIndex = 0;
 let carouselTotal = 0;
 let carouselTimer = null;
-const CAROUSEL_INTERVAL = 7000;
+const CAROUSEL_INTERVAL = 10000;
 
 function initCarousel() {
   const track = document.getElementById('carousel-track');
