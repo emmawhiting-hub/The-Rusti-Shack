@@ -36,39 +36,36 @@ function sortSizes(sizes) {
 }
 
 /* ── Product image helpers ── */
-const LOREMFLICKR = {
-  'Masks':      'snorkeling,diving,mask',
-  'Sets':       'snorkel,ocean,underwater',
-  'Fins':       'scuba,fins,diving',
-  'Wetsuits':   'wetsuit,surfer,ocean',
-  'Surfboards': 'surfboard,surfing,wave',
-  'Accessories':'surfing,beach,ocean',
-  'Skimboards': 'skimboard,beach,shore',
-  'Kitesurf':   'kitesurfing,kite,ocean',
-  'Towels':     'beach,towel,tropical',
-  'Coolers':    'cooler,beach,picnic',
-  'Eyewear':    'sunglasses,beach,sun',
-  'Footwear':   'water,shoes,beach',
-  'Shirts':     'tshirt,tropical,beach',
-  'Rashguards': 'rashguard,surfing,beach',
-  'Bottoms':    'boardshorts,surfing,beach',
-  'Swimwear':   'swimsuit,beach,ocean',
-  'Hats':       'hat,sun,beach',
-};
-
-function getProductImage(product, inUse = true) {
-  const seed = Math.abs(hashStr(product.sku)) % 9000 + 1000;
-  if (inUse) {
-    const kw = LOREMFLICKR[product.subcategory] || 'beach,ocean,water';
-    return `https://loremflickr.com/400/300/${kw}?lock=${seed}`;
+function getProductImage(product) {
+  const entry = PRODUCT_IMAGES[product.sku];
+  if (entry && entry.main) return entry.main;
+  // fallback: try first color image
+  if (entry && entry.colors) {
+    const first = Object.values(entry.colors).find(v => !v.includes('__'));
+    if (first) return first;
   }
-  return null;
+  return `https://placehold.co/400x300/DFF5F2/1A7A9E?text=${encodeURIComponent(product.name)}&font=montserrat`;
 }
 
 function getColorImage(product, color) {
-  const hex = (COLOR_HEX[color] || '00A896').replace('#', '');
-  const label = encodeURIComponent(color || 'Product');
-  return `https://placehold.co/400x400/${hex}/ffffff?text=${label}&font=montserrat`;
+  const entry = PRODUCT_IMAGES[product.sku];
+  if (entry && entry.colors) {
+    if (entry.colors[color]) return entry.colors[color];
+    // try life version
+    if (entry.colors[color + '__life']) return entry.colors[color + '__life'];
+  }
+  if (entry && entry.main) return entry.main;
+  const hex = (COLOR_HEX[color] || '00B4A0').replace('#', '');
+  return `https://placehold.co/400x400/${hex}/ffffff?text=${encodeURIComponent(color || 'Product')}&font=montserrat`;
+}
+
+function getColorHoverImage(product, color) {
+  const entry = PRODUCT_IMAGES[product.sku];
+  if (entry && entry.colors) {
+    if (entry.colors[color + '__life']) return entry.colors[color + '__life'];
+    if (entry.colors[color]) return entry.colors[color];
+  }
+  return getProductImage(product);
 }
 
 function hashStr(s) {
@@ -252,8 +249,8 @@ function renderProducts() {
 }
 
 function buildProductCard(p) {
-  const mainImg = getProductImage(p, true);
-  const hoverImg = p.colors.length ? getColorImage(p, p.colors[0]) : mainImg;
+  const mainImg = getProductImage(p);
+  const hoverImg = p.colors.length ? getColorHoverImage(p, p.colors[0]) : mainImg;
   const fallback = `https://placehold.co/400x300/e8f0f8/1B3D6E?text=${encodeURIComponent(p.name)}&font=montserrat`;
 
   const colorDots = p.colors.slice(0, 7).map(c => {
@@ -303,7 +300,7 @@ function openProductModal(sku) {
 }
 
 function buildModal(p) {
-  const mainImg = getProductImage(p, true);
+  const mainImg = getProductImage(p);
   const fallback = `https://placehold.co/500x500/e8f0f8/1B3D6E?text=${encodeURIComponent(p.name)}&font=montserrat`;
 
   const thumbs = [
