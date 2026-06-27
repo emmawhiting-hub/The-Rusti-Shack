@@ -22,11 +22,11 @@ function addToCart(product, color, size, qty = 1) {
       color: color || null,
       size: size || null,
       price: product.price,
-      image: getProductImage(product, color, false),
+      image: color ? getColorImage(product, color) : getProductImage(product, true),
     });
   }
   saveCart();
-  showToast(`Added to cart!`, 'success');
+  showToast('Added to cart', 'success');
   bumpCartCount();
 }
 
@@ -79,8 +79,14 @@ function renderCart() {
   if (!cart.length) {
     container.innerHTML = `
       <div class="cart-empty">
-        <div class="empty-icon">🛒</div>
-        <p>Your cart is empty.<br>Find something you love!</p>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <path d="M16 10a4 4 0 01-8 0"/>
+          </svg>
+        </div>
+        <p>Your cart is empty.<br>Find something you love.</p>
       </div>`;
     document.getElementById('cart-total').textContent = '$0.00';
     return;
@@ -88,7 +94,7 @@ function renderCart() {
 
   container.innerHTML = cart.map(item => `
     <div class="cart-item">
-      <img src="${item.image}" alt="${item.name}" onerror="this.src='https://placehold.co/80x80/e8f4f3/1B3D6E?text=🐢'">
+      <img src="${item.image}" alt="${item.name}" onerror="this.src='https://placehold.co/80x80/e8f0f8/1B3D6E?text=Product&font=montserrat'">
       <div class="cart-item-info">
         <h4>${item.name}</h4>
         <div class="cart-item-meta">
