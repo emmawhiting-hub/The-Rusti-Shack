@@ -502,7 +502,7 @@ function startCarouselTimer() {
 }
 function resetCarouselTimer() { clearInterval(carouselTimer); startCarouselTimer(); }
 function pauseCarousel()  { clearInterval(carouselTimer); }
-function resumeCarousel() { startCarouselTimer(); }
+function resumeCarousel() { clearInterval(carouselTimer); startCarouselTimer(); }
 
 window.addEventListener('resize', () => goToSlide(carouselIndex));
 
