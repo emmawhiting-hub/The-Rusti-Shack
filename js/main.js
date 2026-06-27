@@ -483,7 +483,15 @@ function initCarousel() {
   dotsEl.innerHTML = Array.from({ length: carouselTotal }, (_, i) =>
     `<button class="carousel-dot${i === 0 ? ' active' : ''}" onclick="goToSlide(${i})" aria-label="Slide ${i+1}"></button>`
   ).join('');
+  sizeCarouselSlides();
   startCarouselTimer();
+}
+
+function sizeCarouselSlides() {
+  const track = document.getElementById('carousel-track');
+  if (!track) return;
+  const w = track.parentElement.offsetWidth;
+  Array.from(track.children).forEach(slide => { slide.style.width = w + 'px'; });
 }
 
 function goToSlide(idx) {
@@ -504,7 +512,7 @@ function resetCarouselTimer() { clearInterval(carouselTimer); startCarouselTimer
 function pauseCarousel()  { clearInterval(carouselTimer); }
 function resumeCarousel() { clearInterval(carouselTimer); startCarouselTimer(); }
 
-window.addEventListener('resize', () => goToSlide(carouselIndex));
+window.addEventListener('resize', () => { sizeCarouselSlides(); goToSlide(carouselIndex); });
 
 /* ── Toast ── */
 function showToast(msg, type = '') {
