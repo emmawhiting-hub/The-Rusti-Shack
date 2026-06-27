@@ -504,6 +504,8 @@ function resetCarouselTimer() { clearInterval(carouselTimer); startCarouselTimer
 function pauseCarousel()  { clearInterval(carouselTimer); }
 function resumeCarousel() { startCarouselTimer(); }
 
+window.addEventListener('resize', () => goToSlide(carouselIndex));
+
 /* ── Toast ── */
 function showToast(msg, type = '') {
   const toast = document.getElementById('toast');

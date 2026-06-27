@@ -920,6 +920,7 @@ blockquote {
 @media (max-width: 640px) {
   .main { padding: 20px 16px; }
   .carousel { height: 320px; width: calc(100% + 32px); margin-left: -16px; margin-right: -16px; margin-top: -20px; }
+  .carousel-slide img { width: 100%; height: 100%; object-fit: cover; object-position: center center; }
   .carousel-overlay { padding: 20px 20px; }
   .carousel-overlay h2 { font-size: 1.5rem; }
   .carousel-overlay p { display: none; }
@@ -928,6 +929,9 @@ blockquote {
   .about-hero { padding: 36px 24px; }
   .about-hero h1 { font-size: 1.8rem; }
   .header-title { display: none; }
+  .header-search { display: none; }
+  .header-actions { margin-left: auto; gap: 8px; }
+  .cart-btn { padding: 8px 14px; font-size: 13px; gap: 6px; }
   .modal-inner { flex-direction: column; }
   .modal-gallery { border-radius: 16px 16px 0 0; }
   .modal-main-img { border-radius: 16px 16px 0 0; }
