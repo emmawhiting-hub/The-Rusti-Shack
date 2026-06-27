@@ -39,10 +39,12 @@ function sortSizes(sizes) {
 function getProductImage(product) {
   const entry = PRODUCT_IMAGES[product.sku];
   if (entry && entry.main) return entry.main;
-  // fallback: try first color image
   if (entry && entry.colors) {
-    const first = Object.values(entry.colors).find(v => !v.includes('__'));
-    if (first) return first;
+    // prefer a life/in-use color shot over a basic one
+    const lifeShot = Object.entries(entry.colors).find(([k]) => k.endsWith('__life'));
+    if (lifeShot) return lifeShot[1];
+    const basicShot = Object.values(entry.colors).find(v => !v.includes('__'));
+    if (basicShot) return basicShot;
   }
   return `https://placehold.co/400x300/DFF5F2/1A7A9E?text=${encodeURIComponent(product.name)}&font=montserrat`;
 }
@@ -62,8 +64,8 @@ function getColorImage(product, color) {
 function getColorHoverImage(product, color) {
   const entry = PRODUCT_IMAGES[product.sku];
   if (entry && entry.colors) {
-    if (entry.colors[color + '__life']) return entry.colors[color + '__life'];
     if (entry.colors[color]) return entry.colors[color];
+    if (entry.colors[color + '__life']) return entry.colors[color + '__life'];
   }
   return getProductImage(product);
 }
