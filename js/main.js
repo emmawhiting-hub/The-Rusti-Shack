@@ -82,8 +82,10 @@ document.addEventListener('DOMContentLoaded', () => {
   buildSidebar();
   renderProducts();
   updateCartCount();
+  showHome();
   document.getElementById('search-input').addEventListener('input', e => {
     searchQuery = e.target.value.toLowerCase().trim();
+    if (searchQuery) { showShopView(); }
     renderProducts();
   });
 });
@@ -176,13 +178,23 @@ function showAll() {
   renderProducts();
 }
 
+function showHome() {
+  document.getElementById('home-view') && (document.getElementById('home-view').style.display = '');
+  document.getElementById('shop-view').style.display = 'none';
+  document.getElementById('about-view').style.display = 'none';
+  document.getElementById('nav-all').classList.remove('active');
+  currentView = 'home';
+}
+
 function showShopView() {
+  document.getElementById('home-view').style.display = 'none';
   document.getElementById('shop-view').style.display = '';
   document.getElementById('about-view').style.display = 'none';
   document.getElementById('nav-all').classList.toggle('active', !activeCategory && !activeSubcategory);
 }
 
 function showAboutView() {
+  document.getElementById('home-view').style.display = 'none';
   document.getElementById('shop-view').style.display = 'none';
   document.getElementById('about-view').style.display = 'block';
   document.getElementById('nav-all').classList.remove('active');
