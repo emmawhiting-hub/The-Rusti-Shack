@@ -183,14 +183,21 @@ function showHome() {
   document.getElementById('home-view') && (document.getElementById('home-view').style.display = '');
   document.getElementById('shop-view').style.display = 'none';
   document.getElementById('about-view').style.display = 'none';
+  document.getElementById('checkout-view').style.display = 'none';
   document.getElementById('nav-all').classList.remove('active');
   currentView = 'home';
+}
+
+function showShopFromCheckout() {
+  document.getElementById('checkout-view').style.display = 'none';
+  showAll();
 }
 
 function showShopView() {
   document.getElementById('home-view').style.display = 'none';
   document.getElementById('shop-view').style.display = '';
   document.getElementById('about-view').style.display = 'none';
+  document.getElementById('checkout-view').style.display = 'none';
   document.getElementById('nav-all').classList.toggle('active', !activeCategory && !activeSubcategory);
 }
 
@@ -198,6 +205,7 @@ function showAboutView() {
   document.getElementById('home-view').style.display = 'none';
   document.getElementById('shop-view').style.display = 'none';
   document.getElementById('about-view').style.display = 'block';
+  document.getElementById('checkout-view').style.display = 'none';
   document.getElementById('nav-all').classList.remove('active');
   document.querySelectorAll('.sub-item').forEach(e => e.classList.remove('active'));
   currentView = 'about';
@@ -263,8 +271,6 @@ function buildProductCard(p) {
   }).join('');
 
   let badgeText = '', badgeClass = '';
-  if (p.availability === 'Rental') { badgeText = 'Rental Only'; badgeClass = 'rental'; }
-  else if (p.availability === 'Both') { badgeText = 'Buy or Rent'; badgeClass = 'both'; }
 
   return `
     <div class="product-card" onclick="openProductModal('${p.sku}')">
@@ -281,7 +287,6 @@ function buildProductCard(p) {
         ${colorDots ? `<div class="product-colors">${colorDots}</div>` : ''}
         <div class="product-footer">
           <span class="product-price">${formatPrice(p.price)}</span>
-          ${p.rentalRate ? `<span class="product-rental">Rent ${formatPrice(p.rentalRate)}/day</span>` : ''}
         </div>
       </div>
     </div>`;
@@ -326,11 +331,6 @@ function buildModal(p) {
   }).join('');
 
   let availHtml = '';
-  if (p.availability === 'Both' && p.rentalRate) {
-    availHtml = `<div class="modal-rental-info">Available to purchase or rent &mdash; Rental rate: <strong>${formatPrice(p.rentalRate)}/day</strong></div>`;
-  } else if (p.availability === 'Rental' && p.rentalRate) {
-    availHtml = `<div class="modal-rental-info">Rental only &mdash; <strong>${formatPrice(p.rentalRate)}/day</strong></div>`;
-  }
 
   const thumbHtml = thumbs.map((t, i) => `
     <img class="modal-thumb ${i === 0 ? 'active' : ''}"
