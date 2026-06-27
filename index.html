@@ -107,80 +107,116 @@
     <!-- HOME VIEW -->
     <div id="home-view">
 
-      <div class="home-hero">
-        <div class="home-hero-text">
-          <p class="hero-eyebrow">Apo Island, Philippines</p>
-          <h1>Welcome to<br>The Rusti Shack</h1>
-          <p>Your home for ocean adventures on one of the Philippines' most treasured marine sanctuaries — gear up, dive in, and explore.</p>
-          <button class="view-products-btn" onclick="showAll()">View All Products</button>
+      <!-- CAROUSEL -->
+      <div class="carousel" id="home-carousel"
+           onmouseenter="pauseCarousel()" onmouseleave="resumeCarousel()">
+        <div class="carousel-track" id="carousel-track">
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/sea+turtle,coral,underwater,tropical?lock=51" alt="Sea turtle at Apo Island">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">Apo Island, Philippines</p>
+              <h2>Swim with Sea Turtles</h2>
+              <p>Apo Island's protected waters are home to dozens of resident sea turtles — some of the most reliably accessible in the world.</p>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/coral+reef,philippines,fish,tropical?lock=52" alt="Coral reef Apo Island">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">Marine Sanctuary</p>
+              <h2>World-Class Coral Gardens</h2>
+              <p>A protected marine reserve since 1982, Apo Island's reefs teem with hundreds of fish species and breathtaking coral formations.</p>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/philippines,tropical,island,beach,clear+water?lock=53" alt="Apo Island beach">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">4 Miles Offshore</p>
+              <h2>An Island Like No Other</h2>
+              <p>Just a short boat ride from the Negros Oriental coast, Apo Island rises from crystal-clear waters surrounded by pristine sandy beaches.</p>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/snorkeling,diving,ocean,underwater,tropical?lock=54" alt="Snorkeling Apo Island">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">Gear Up &amp; Dive In</p>
+              <h2>Snorkel, Dive, Surf</h2>
+              <p>Whether you are a first-time snorkeler or an experienced diver, The Rusti Shack has everything you need to explore the ocean.</p>
+              <button class="carousel-cta" onclick="showAll()">View All Products</button>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/tropical,sunset,beach,philippines,ocean?lock=55" alt="Apo Island sunset">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">Since 2021</p>
+              <h2>Born on the Beach</h2>
+              <p>Rusti started The Rusti Shack from a small, rusty shack right on the beach. Today, she serves visitors and ocean lovers around the world.</p>
+              <button class="carousel-cta" onclick="showAboutView()">Our Story</button>
+            </div>
+          </div>
+
+          <div class="carousel-slide">
+            <img src="https://loremflickr.com/1400/640/surfing,waves,tropical,ocean,beach?lock=56" alt="Surfing near Apo Island">
+            <div class="carousel-overlay">
+              <p class="carousel-eyebrow">Rent or Buy</p>
+              <h2>Everything for the Ocean</h2>
+              <p>Rent on-site at the island or shop online and ship worldwide — fins, wetsuits, surfboards, apparel, and more.</p>
+              <button class="carousel-cta" onclick="showAll()">Shop Now</button>
+            </div>
+          </div>
+
         </div>
-        <div class="home-hero-img">
-          <img src="https://loremflickr.com/700/480/apo+island,philippines,ocean?lock=11" alt="Apo Island" onerror="this.style.background='var(--ocean-mid)'">
+
+        <!-- Dots -->
+        <div class="carousel-dots" id="carousel-dots"></div>
+
+        <!-- Arrows -->
+        <button class="carousel-arrow carousel-prev" onclick="carouselPrev()" aria-label="Previous">&#8249;</button>
+        <button class="carousel-arrow carousel-next" onclick="carouselNext()" aria-label="Next">&#8250;</button>
+      </div>
+
+      <!-- APO ISLAND INTRO -->
+      <div class="apo-intro">
+        <div class="apo-intro-text">
+          <p class="section-eyebrow">Discover Apo Island</p>
+          <h2 class="section-title-lg">A Living Marine Sanctuary</h2>
+          <p>Apo Island is a tiny volcanic island off the coast of Negros Oriental — one of the Philippines' most celebrated dive destinations and home to a thriving, protected coral reef ecosystem.</p>
+          <p>The island has no cars, no resorts, and no crowds. Just clear blue water, warm sand, and an ocean full of life waiting to be explored.</p>
+        </div>
+        <div class="apo-intro-facts">
+          <div class="fact-card">
+            <span class="fact-num">300+</span>
+            <span class="fact-label">Fish Species</span>
+          </div>
+          <div class="fact-card">
+            <span class="fact-num">40+</span>
+            <span class="fact-label">Resident Sea Turtles</span>
+          </div>
+          <div class="fact-card">
+            <span class="fact-num">1982</span>
+            <span class="fact-label">Marine Reserve Since</span>
+          </div>
+          <div class="fact-card">
+            <span class="fact-num">4 mi</span>
+            <span class="fact-label">Offshore by Boat</span>
+          </div>
         </div>
       </div>
 
-      <div class="apo-section">
-        <p class="section-eyebrow">Discover Apo Island</p>
-        <h2 class="section-title-lg">A World-Class Marine Sanctuary</h2>
-        <p class="section-sub">Apo Island sits off the coast of Negros Oriental, Philippines — a protected marine reserve teeming with sea turtles, vibrant coral gardens, and hundreds of fish species.</p>
-        <div class="apo-photo-grid">
-          <div class="apo-photo apo-photo-tall">
-            <img src="https://loremflickr.com/600/700/sea+turtle,ocean,underwater?lock=21" alt="Sea turtle at Apo Island">
-            <div class="photo-caption">Sea Turtles</div>
-          </div>
-          <div class="apo-photo-col">
-            <div class="apo-photo">
-              <img src="https://loremflickr.com/600/340/coral+reef,philippines,underwater?lock=22" alt="Coral reef">
-              <div class="photo-caption">Coral Gardens</div>
-            </div>
-            <div class="apo-photo">
-              <img src="https://loremflickr.com/600/340/philippines,beach,tropical?lock=23" alt="Apo Island beach">
-              <div class="photo-caption">Crystal-Clear Waters</div>
-            </div>
-          </div>
-          <div class="apo-photo apo-photo-tall">
-            <img src="https://loremflickr.com/600/700/snorkeling,philippines,ocean?lock=24" alt="Snorkeling at Apo Island">
-            <div class="photo-caption">Snorkeling &amp; Diving</div>
-          </div>
-        </div>
-      </div>
-
+      <!-- ABOUT CARDS -->
       <div class="about-grid">
-        <div class="about-card">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-          </div>
-          <h3>Our Mission</h3>
-          <p>We believe everyone deserves to experience the magic of the ocean. We provide quality gear for rent and purchase so you can explore without worry.</p>
-        </div>
         <div class="about-card">
           <div class="card-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
             </svg>
           </div>
-          <h3>Gear Rentals</h3>
-          <p>Visiting Apo Island? Rent from us on-site. Snorkel sets, fins, wetsuits, surfboards and more — available daily, right at the beach.</p>
-        </div>
-        <div class="about-card">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-            </svg>
-          </div>
-          <h3>Locally Owned</h3>
-          <p>The Rusti Shack is a small, locally owned business rooted in the Apo Island community. We work with local guides, instructors, and artisans.</p>
-        </div>
-        <div class="about-card">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-            </svg>
-          </div>
-          <h3>Reef Conservation</h3>
-          <p>A portion of every sale supports Apo Island's marine sanctuary. We are committed to sustainable ocean practices and reef conservation.</p>
+          <h3>On-Site Rentals</h3>
+          <p>Visiting Apo Island? Rent from us right at the beach — snorkel sets, fins, wetsuits, surfboards and more, available daily.</p>
         </div>
         <div class="about-card">
           <div class="card-icon">
@@ -189,22 +225,31 @@
             </svg>
           </div>
           <h3>Ships Worldwide</h3>
-          <p>Can't visit us in person? We ship all products worldwide so you can bring a piece of Apo Island home, wherever you are.</p>
+          <p>Loved your gear from the island? Shop online and we'll ship to Australia, Japan, the USA, Germany, and more.</p>
         </div>
         <div class="about-card">
           <div class="card-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12h18M3 6h18M3 18h18"/>
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
             </svg>
           </div>
-          <h3>Our Story</h3>
-          <p>What began as a one-person rental stand grew into a full gear shop serving visitors from around the world — born from a love of the ocean.</p>
+          <h3>Reef First</h3>
+          <p>Apo Island's reef is why we exist. We care deeply about keeping it healthy and beautiful for the next generation of ocean lovers.</p>
+        </div>
+        <div class="about-card">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+          </div>
+          <h3>Locally Owned</h3>
+          <p>The Rusti Shack is founded and run by Rusti — a small, independent business rooted in the Apo Island community since 2021.</p>
         </div>
       </div>
 
       <div class="home-cta">
         <h2>Ready to Gear Up?</h2>
-        <p>Browse our full range of snorkel gear, surf equipment, apparel, and beach essentials.</p>
+        <p>Browse snorkel gear, surf equipment, apparel, and beach essentials — for rent on the island or shipped anywhere in the world.</p>
         <button class="view-products-btn" onclick="showAll()">View All Products</button>
       </div>
 
@@ -222,23 +267,95 @@
 
     </div>
 
-    <!-- ABOUT VIEW (kept for sidebar nav) -->
+    <!-- ABOUT VIEW -->
     <div id="about-view" style="display:none">
 
       <div class="about-hero">
         <p class="eyebrow">Our Story</p>
         <h1>About The Rusti Shack</h1>
-        <p>Born from a love of the ocean and the crystal-clear waters of Apo Island — we are here to gear you up for the adventure of a lifetime.</p>
+        <p>A small beach rental business born on the shores of Apo Island — and built, one snorkel at a time, into something much more.</p>
       </div>
 
-      <div class="about-story">
-        <h2>Our Story</h2>
-        <p>The Rusti Shack started as a simple dream: a little beach shack where travelers could grab their snorkel gear and jump straight into the crystal-blue waters of Apo Island. What began as a one-person rental stand grew into a full gear shop serving visitors from around the world.</p>
-        <p>Apo Island is one of the Philippines' most treasured diving destinations — and we want to keep it that way. We are committed to eco-friendly practices, supporting local conservation efforts, and helping our guests connect with the ocean responsibly.</p>
-        <p>Whether you are a first-time snorkeler, a seasoned diver, or a surfer chasing the perfect wave, The Rusti Shack has everything you need.</p>
+      <!-- FOUNDER SECTION -->
+      <div class="founder-section">
+        <div class="founder-photo">
+          <img src="https://loremflickr.com/480/560/woman,beach,entrepreneur,tropical?lock=99" alt="Rusti, founder of The Rusti Shack">
+          <div class="founder-photo-caption">Rusti — Founder &amp; Owner</div>
+        </div>
+        <div class="founder-story">
+          <p class="section-eyebrow">Meet Rusti</p>
+          <h2>The Woman Behind the Shack</h2>
+          <blockquote>
+            "I started The Rusti Shack shortly after finishing my bachelor's in entrepreneurship at BYU-Hawaii. I found a small, rusty shack on the beach that I could afford, bought it, and named the business The Rusti Shack as a play on words — where I embedded my own name into the name of my business."
+          </blockquote>
+          <p>Rusti launched the business in 2021 from that little shack right on the beach of Apo Island, about four miles offshore from the Negros Oriental mainland — only accessible by boat. From day one, she rented beach balls, snorkels, masks, fins, swim gear, and a surfboard or two to the steady stream of divers and tourists making the crossing from the mainland.</p>
+          <blockquote>
+            "Within a year, demand outgrew the shack, and I moved into a proper storefront across the street from the beach. Later, I added a small online channel for repeat customers who wanted to buy gear after they returned home."
+          </blockquote>
+        </div>
       </div>
 
-      <div style="text-align:center;padding-bottom:16px">
+      <!-- TIMELINE -->
+      <div class="timeline-section">
+        <p class="section-eyebrow">Our Journey</p>
+        <h2 class="section-title-lg">How It All Started</h2>
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-year">2021</div>
+            <div class="timeline-content">
+              <h3>The Rusty Shack</h3>
+              <p>Rusti graduates from BYU-Hawaii with a degree in entrepreneurship, finds a small, affordable shack on the beach of Apo Island, and opens The Rusti Shack — renting snorkels, masks, fins, swim gear, and surfboards to visiting divers and tourists.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-year">2022</div>
+            <div class="timeline-content">
+              <h3>A Proper Storefront</h3>
+              <p>Demand grows faster than the shack can hold. Rusti moves into a real storefront across the street from the beach, expanding the product range and welcoming even more visitors to Apo Island.</p>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-year">Online</div>
+            <div class="timeline-content">
+              <h3>Ships Worldwide</h3>
+              <p>Repeat customers — divers from Japan, surfers from Australia, snorkelers from Germany — start asking to buy gear after going home. Rusti adds an online channel and now ships to eight countries around the world.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VALUES -->
+      <div class="about-grid" style="margin-bottom:32px">
+        <div class="about-card">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+            </svg>
+          </div>
+          <h3>Reef First</h3>
+          <p>Apo Island's marine sanctuary is what makes this place special. Rusti is committed to operating sustainably and hopes to give back to reef conservation as the business grows.</p>
+        </div>
+        <div class="about-card">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            </svg>
+          </div>
+          <h3>Locally Rooted</h3>
+          <p>The Rusti Shack is an independent, owner-run business on Apo Island. Rusti works with local guides, boat operators, and the island community every day.</p>
+        </div>
+        <div class="about-card">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+            </svg>
+          </div>
+          <h3>Gear for Everyone</h3>
+          <p>First-time snorkeler or seasoned diver — Rusti believes everyone deserves to experience the magic of Apo Island's ocean. Quality gear, fair prices, no fuss.</p>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding-bottom:32px">
         <button class="view-products-btn" onclick="showAll()">View All Products</button>
       </div>
 
