@@ -22,7 +22,7 @@ function addToCart(product, color, size, qty = 1) {
       color: color || null,
       size: size || null,
       price: product.price,
-      image: color ? getColorImage(product, color) : getProductImage(product, true),
+      image: color ? getColorImage(product, color) : getProductImage(product),
     });
   }
   saveCart();
@@ -88,7 +88,7 @@ function renderCart() {
         </div>
         <p>Your cart is empty.<br>Find something you love.</p>
       </div>`;
-    document.getElementById('cart-total').textContent = '$0.00';
+    document.getElementById('cart-total').textContent = formatPrice(0);
     return;
   }
 
@@ -104,7 +104,7 @@ function renderCart() {
           <br>SKU: ${item.sku}
         </div>
         <div class="cart-item-row">
-          <span class="cart-item-price">$${(item.price * item.qty).toFixed(2)}</span>
+          <span class="cart-item-price">${formatPrice(item.price * item.qty)}</span>
           <div class="cart-item-qty">
             <button onclick="updateQty('${item.key}', -1)">−</button>
             <span>${item.qty}</span>
@@ -116,7 +116,7 @@ function renderCart() {
     </div>
   `).join('');
 
-  document.getElementById('cart-total').textContent = `$${cartTotal().toFixed(2)}`;
+  document.getElementById('cart-total').textContent = formatPrice(cartTotal());
 }
 
 function openCart() {

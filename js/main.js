@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderProducts();
   updateCartCount();
   showHome();
+  fetchExchangeRates();
   document.getElementById('search-input').addEventListener('input', e => {
     searchQuery = e.target.value.toLowerCase().trim();
     if (searchQuery) { showShopView(); }
@@ -278,8 +279,8 @@ function buildProductCard(p) {
         <h3>${p.name}</h3>
         ${colorDots ? `<div class="product-colors">${colorDots}</div>` : ''}
         <div class="product-footer">
-          <span class="product-price">$${p.price.toFixed(2)}</span>
-          ${p.rentalRate ? `<span class="product-rental">Rent $${p.rentalRate.toFixed(2)}/day</span>` : ''}
+          <span class="product-price">${formatPrice(p.price)}</span>
+          ${p.rentalRate ? `<span class="product-rental">Rent ${formatPrice(p.rentalRate)}/day</span>` : ''}
         </div>
       </div>
     </div>`;
@@ -325,9 +326,9 @@ function buildModal(p) {
 
   let availHtml = '';
   if (p.availability === 'Both' && p.rentalRate) {
-    availHtml = `<div class="modal-rental-info">Available to purchase or rent &mdash; Rental rate: <strong>$${p.rentalRate.toFixed(2)}/day</strong></div>`;
+    availHtml = `<div class="modal-rental-info">Available to purchase or rent &mdash; Rental rate: <strong>${formatPrice(p.rentalRate)}/day</strong></div>`;
   } else if (p.availability === 'Rental' && p.rentalRate) {
-    availHtml = `<div class="modal-rental-info">Rental only &mdash; <strong>$${p.rentalRate.toFixed(2)}/day</strong></div>`;
+    availHtml = `<div class="modal-rental-info">Rental only &mdash; <strong>${formatPrice(p.rentalRate)}/day</strong></div>`;
   }
 
   const thumbHtml = thumbs.map((t, i) => `
@@ -352,7 +353,7 @@ function buildModal(p) {
             <h2 class="modal-name">${p.name}</h2>
             <p class="modal-sku">SKU: ${p.sku}</p>
           </div>
-          <p class="modal-price">$${p.price.toFixed(2)}</p>
+          <p class="modal-price">${formatPrice(p.price)}</p>
           ${availHtml}
           ${p.colors.length ? `
             <div>

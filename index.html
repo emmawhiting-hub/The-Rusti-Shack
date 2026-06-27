@@ -29,6 +29,34 @@
   </div>
 
   <div class="header-actions">
+
+    <!-- Currency selector -->
+    <div class="currency-wrap">
+      <button class="currency-btn" id="currency-btn" onclick="toggleCurrencyDropdown(event)" aria-label="Select currency">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/>
+        </svg>
+        <span id="currency-flag">🇺🇸</span>
+        <span id="currency-code">USD</span>
+        <svg class="chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="currency-dropdown" id="currency-dropdown">
+        <div class="currency-dropdown-title">Ship to</div>
+        <button class="currency-option" data-currency="PHP" onclick="setCurrency('PHP')">🇵🇭 Philippines <span>PHP ₱</span></button>
+        <button class="currency-option active" data-currency="USD" onclick="setCurrency('USD')">🇺🇸 USA <span>USD $</span></button>
+        <button class="currency-option" data-currency="AUD" onclick="setCurrency('AUD')">🇦🇺 Australia <span>AUD A$</span></button>
+        <button class="currency-option" data-currency="EUR" onclick="setCurrency('EUR')">🇩🇪 Germany <span>EUR €</span></button>
+        <button class="currency-option" data-currency="JPY" onclick="setCurrency('JPY')">🇯🇵 Japan <span>JPY ¥</span></button>
+        <button class="currency-option" data-currency="NZD" onclick="setCurrency('NZD')">🇳🇿 New Zealand <span>NZD NZ$</span></button>
+        <button class="currency-option" data-currency="SGD" onclick="setCurrency('SGD')">🇸🇬 Singapore <span>SGD S$</span></button>
+        <button class="currency-option" data-currency="KRW" onclick="setCurrency('KRW')">🇰🇷 South Korea <span>KRW ₩</span></button>
+      </div>
+    </div>
+
     <button class="cart-btn" onclick="openCart()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
@@ -259,6 +287,7 @@
 <!-- SCRIPTS -->
 <script src="js/products.js"></script>
 <script src="js/product-images.js"></script>
+<script src="js/currency.js"></script>
 <script src="js/cart.js"></script>
 <script src="js/main.js"></script>
 
