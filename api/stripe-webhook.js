@@ -57,6 +57,15 @@ async function writeOrder(supabase, session) {
   console.log(`Order written to DB: ${orderCode} | customer: ${customerId} | total: ${total}`);
 }
 
+function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
@@ -71,8 +80,9 @@ async function handler(req, res) {
   let stripeEvent;
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const rawBody = await getRawBody(req);
     stripeEvent = stripe.webhooks.constructEvent(
-      req.body,
+      rawBody,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
