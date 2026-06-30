@@ -349,7 +349,9 @@ function buildModal(p) {
     return `<button class="size-opt ${sel}" onclick="selectSize('${s}', this)">${s}</button>`;
   }).join('');
 
-  let availHtml = '';
+  let availHtml = p.availability === 'Both'
+    ? `<p class="modal-rental-note">Also available to rent in person on Apo Island.</p>`
+    : '';
 
   const thumbHtml = thumbs.map((t, i) => `
     <img class="modal-thumb ${i === 0 ? 'active' : ''}"

@@ -13,7 +13,7 @@ const PRODUCT_PRICES = {
   "KIT-001": 1099.00, "KIT-002": 139.00,
 };
 
-const SHIPPING_FEE_USD = 15.00;
+const SHIPPING_FEE_USD = 12.00;
 const ALLOWED_ORIGINS = [
   'https://the-rusti-shack.vercel.app',
   'http://localhost:3456',

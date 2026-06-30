@@ -1,4 +1,4 @@
-const SHIPPING_FEE_USD = 15.00;
+const SHIPPING_FEE_USD = 12.00;
 
 function generateOrderCode() {
   const seq = parseInt(localStorage.getItem('rusti_order_seq') || '50005');
