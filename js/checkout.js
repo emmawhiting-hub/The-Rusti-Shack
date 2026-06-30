@@ -88,7 +88,7 @@ async function submitCheckout(e) {
   btn.textContent = 'Redirecting to payment…';
 
   try {
-    const res = await fetch('/.netlify/functions/create-checkout-session', {
+    const res = await fetch('/api/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cartItems: cartSnapshot, customer, orderCode }),
