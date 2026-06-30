@@ -63,6 +63,7 @@ const PRODUCT_PRICES = {
 
 const SHIPPING_FEE_USD = 12.00;
 const ALLOWED_ORIGINS = [
+  'https://the-rusti-shack-beta.vercel.app',
   'https://the-rusti-shack.vercel.app',
   'http://localhost:3456',
   'http://localhost:3000',
