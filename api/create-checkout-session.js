@@ -1,4 +1,52 @@
 const Stripe = require('stripe');
+const { createClient } = require('@supabase/supabase-js');
+
+const SUPABASE_URL = 'https://tukwikdsvjqlyyegdaak.supabase.co';
+
+// Web-channel customer IDs start at C10001 to never collide with
+// Rusti's existing in-store IDs (which use C01001–C09999).
+const WEB_CUSTOMER_ID_START = 10001;
+
+async function resolveCustomerId(supabase, email, firstName, lastName, loyalty) {
+  // Look up by email — one person, one ID
+  const { data: existing } = await supabase
+    .from('Customers_Contact')
+    .select('CustomerID')
+    .eq('Email', email)
+    .maybeSingle();
+
+  if (existing) return existing.CustomerID;
+
+  // New customer — find the highest web-channel ID so far
+  const { data: rows } = await supabase
+    .from('Customers_Core')
+    .select('CustomerID')
+    .gte('CustomerID', `C${WEB_CUSTOMER_ID_START}`)
+    .order('CustomerID', { ascending: false })
+    .limit(1);
+
+  const lastNum = rows && rows.length
+    ? parseInt(rows[0].CustomerID.slice(1), 10)
+    : WEB_CUSTOMER_ID_START - 1;
+
+  const newId = 'C' + String(lastNum + 1).padStart(5, '0');
+
+  await supabase.from('Customers_Core').insert({
+    CustomerID:   newId,
+    FirstName:    firstName,
+    LastName:     lastName,
+    CustomerType: 'Retail',
+    JoinDate:     new Date().toISOString().split('T')[0],
+  });
+
+  await supabase.from('Customers_Contact').insert({
+    CustomerID:    newId,
+    Email:         email,
+    LoyaltyMember: loyalty || false,
+  });
+
+  return newId;
+}
 
 // §5 — prices come from the server, never from the client.
 const PRODUCT_PRICES = {
@@ -83,6 +131,16 @@ module.exports = async function handler(req, res) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const siteOrigin = ALLOWED_ORIGINS.find(o => origin.startsWith(o)) || ALLOWED_ORIGINS[0];
 
+    // Resolve or create customer — never duplicate on email
+    const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+    const customerId = await resolveCustomerId(
+      supabase,
+      customer.email,
+      customer.firstName,
+      customer.lastName,
+      customer.loyalty,
+    );
+
     const lineItems = cartItems.map(item => ({
       price_data: {
         currency: 'usd',
@@ -113,6 +171,7 @@ module.exports = async function handler(req, res) {
       customer_email: customer.email,
       metadata: {
         orderCode,
+        customerId,
         firstName:     customer.firstName.slice(0, 100),
         lastName:      customer.lastName.slice(0, 100),
         phone:         (customer.phone || '').slice(0, 50),
