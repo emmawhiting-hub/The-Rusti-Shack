@@ -204,6 +204,6 @@ module.exports = async function handler(req, res) {
 
   } catch (err) {
     console.error('Stripe session creation failed:', err.message);
-    return res.status(500).send('Payment setup failed. Please try again.');
+    return res.status(500).send('DEBUG: ' + err.message);
   }
 };
