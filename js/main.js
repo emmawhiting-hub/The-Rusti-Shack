@@ -76,26 +76,45 @@ function hashStr(s) {
   return h;
 }
 
+/* ── Product source (Supabase live, falls back to bundled PRODUCTS) ── */
+let _liveProducts = null;
+function getProducts() { return _liveProducts || PRODUCTS; }
+
 /* ── Init ── */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  // Show the site immediately with the bundled product list
   buildSidebar();
   renderProducts();
   updateCartCount();
   showHome();
   initCarousel();
   fetchExchangeRates();
+
   document.getElementById('search-input').addEventListener('input', e => {
     searchQuery = e.target.value.toLowerCase().trim();
     if (searchQuery) { showShopView(); }
     renderProducts();
   });
+
+  // Then try to fetch live data from Supabase and re-render silently
+  try {
+    const live = await fetchProductsFromSupabase();
+    if (live && live.length) {
+      _liveProducts = live;
+      buildSidebar();
+      renderProducts();
+    }
+  } catch (err) {
+    // Supabase unreachable — bundled fallback already showing, nothing to do
+    console.warn('Supabase fetch failed, using bundled product list:', err.message);
+  }
 });
 
 /* ── Sidebar ── */
 function buildSidebar() {
   const container = document.getElementById('sidebar-cats');
   const categories = {};
-  PRODUCTS.forEach(p => {
+  getProducts().forEach(p => {
     if (!categories[p.category]) categories[p.category] = new Set();
     categories[p.category].add(p.subcategory);
   });
@@ -213,7 +232,7 @@ function showAboutView() {
 
 /* ── Render products ── */
 function getFilteredProducts() {
-  return PRODUCTS.filter(p => {
+  return getProducts().filter(p => {
     if (activeSubcategory && p.subcategory !== activeSubcategory) return false;
     if (activeCategory && !activeSubcategory && p.category !== activeCategory) return false;
     if (searchQuery) {
@@ -294,7 +313,7 @@ function buildProductCard(p) {
 
 /* ── Product Modal ── */
 function openProductModal(sku) {
-  const p = PRODUCTS.find(x => x.sku === sku);
+  const p = getProducts().find(x => x.sku === sku);
   if (!p) return;
   modalProduct = p;
   selectedColor = p.colors.length === 1 ? p.colors[0] : null;
