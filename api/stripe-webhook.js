@@ -1,8 +1,6 @@
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
-// Vercel: disable body parsing so Stripe can verify the raw request signature
-module.exports.config = { api: { bodyParser: false } };
 
 const SUPABASE_URL = 'https://tukwikdsvjqlyyegdaak.supabase.co';
 const SHIPPING_FEE_USD = 12.00;
@@ -59,7 +57,7 @@ async function writeOrder(supabase, session) {
   console.log(`Order written to DB: ${orderCode} | customer: ${customerId} | total: ${total}`);
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -110,4 +108,7 @@ module.exports = async function handler(req, res) {
 
   processedEvents.add(stripeEvent.id);
   return res.status(200).send('ok');
-};
+}
+
+handler.config = { api: { bodyParser: false } };
+module.exports = handler;
