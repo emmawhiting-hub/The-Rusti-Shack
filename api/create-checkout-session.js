@@ -31,19 +31,21 @@ async function resolveCustomerId(supabase, email, firstName, lastName, loyalty) 
 
   const newId = 'C' + String(lastNum + 1).padStart(5, '0');
 
-  await supabase.from('Customers_Core').insert({
+  const { error: coreErr } = await supabase.from('Customers_Core').insert({
     CustomerID:   newId,
     FirstName:    firstName,
     LastName:     lastName,
     CustomerType: 'Retail',
     JoinDate:     new Date().toISOString().split('T')[0],
   });
+  if (coreErr) throw new Error('Customers_Core insert: ' + coreErr.message);
 
-  await supabase.from('Customers_Contact').insert({
+  const { error: contactErr } = await supabase.from('Customers_Contact').insert({
     CustomerID:    newId,
     Email:         email,
     LoyaltyMember: loyalty || false,
   });
+  if (contactErr) throw new Error('Customers_Contact insert: ' + contactErr.message);
 
   return newId;
 }
