@@ -69,6 +69,13 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
 ];
 
+function isAllowedOrigin(origin) {
+  if (ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return true;
+  // Allow any Vercel preview deployment for this project
+  if (/^https:\/\/the-rusti-shack[a-z0-9-]*\.vercel\.app$/.test(origin)) return true;
+  return false;
+}
+
 function isValidSku(sku) {
   return typeof sku === 'string' && /^[A-Z]{2,5}-\d{3}$/.test(sku) && sku in PRODUCT_PRICES;
 }
@@ -84,7 +91,7 @@ function isValidEmail(val) {
 
 module.exports = async function handler(req, res) {
   const origin = req.headers.origin || '';
-  if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+  if (!isAllowedOrigin(origin)) {
     return res.status(403).send('Forbidden');
   }
 
@@ -130,7 +137,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-    const siteOrigin = ALLOWED_ORIGINS.find(o => origin.startsWith(o)) || ALLOWED_ORIGINS[0];
+    const siteOrigin = origin || ALLOWED_ORIGINS[0];
 
     // Resolve or create customer — never duplicate on email
     let customerId = null;
