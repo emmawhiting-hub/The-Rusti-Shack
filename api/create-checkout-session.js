@@ -142,6 +142,7 @@ module.exports = async function handler(req, res) {
     // Resolve or create customer — never duplicate on email
     let customerId = null;
     try {
+      console.log('Supabase key present:', !!process.env.SUPABASE_SECRET_KEY);
       const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
       customerId = await resolveCustomerId(
         supabase,
@@ -151,8 +152,7 @@ module.exports = async function handler(req, res) {
         customer.loyalty,
       );
     } catch (dbErr) {
-      // Don't block payment if customer lookup fails — log and continue
-      console.error('Customer DB lookup failed (non-fatal):', dbErr.message);
+      console.error('Customer DB lookup failed (non-fatal):', dbErr.message, dbErr.stack);
     }
 
     const lineItems = cartItems.map(item => ({
