@@ -388,15 +388,18 @@
               <div class="co-field">
                 <label>First Name</label>
                 <input name="firstName" type="text" required placeholder="Maria">
+                <span class="co-error" id="err-firstName"></span>
               </div>
               <div class="co-field">
                 <label>Last Name</label>
                 <input name="lastName" type="text" required placeholder="Santos">
+                <span class="co-error" id="err-lastName"></span>
               </div>
             </div>
             <div class="co-field">
               <label>Email</label>
               <input name="email" type="email" required placeholder="you@example.com">
+              <span class="co-error" id="err-email"></span>
             </div>
             <div class="co-field">
               <label>Phone</label>
@@ -407,11 +410,25 @@
             <div class="co-field">
               <label>Street Address</label>
               <input name="streetAddress" type="text" required placeholder="123 Ocean Drive, Apt 4">
+              <span class="co-error" id="err-streetAddress"></span>
             </div>
             <div class="co-row">
               <div class="co-field">
                 <label>City</label>
                 <input name="city" type="text" required placeholder="Sydney">
+                <span class="co-error" id="err-city"></span>
+              </div>
+              <div class="co-field">
+                <label>Region / State</label>
+                <input name="region" type="text" placeholder="NSW">
+                <span class="co-error" id="err-region"></span>
+              </div>
+            </div>
+            <div class="co-row">
+              <div class="co-field">
+                <label>Postal Code</label>
+                <input name="postalCode" type="text" placeholder="2000">
+                <span class="co-error" id="err-postalCode"></span>
               </div>
               <div class="co-field">
                 <label>Country</label>
@@ -435,6 +452,7 @@
                   <option>Mexico</option><option>Argentina</option>
                   <option>South Africa</option><option>Other</option>
                 </select>
+                <span class="co-error" id="err-country"></span>
               </div>
             </div>
 

@@ -41,10 +41,62 @@ function renderCheckoutSummary() {
   document.getElementById('co-total').textContent = formatPrice(totalUSD);
 }
 
+function setFieldError(id, msg) {
+  const el = document.getElementById('err-' + id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function clearFieldErrors() {
+  document.querySelectorAll('.co-error').forEach(el => {
+    el.textContent = '';
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.co-field input, .co-field select').forEach(el => {
+    el.classList.remove('co-invalid');
+  });
+}
+
+function validateCheckoutForm(f) {
+  let ok = true;
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const required = [
+    ['firstName',     'First name is required'],
+    ['lastName',      'Last name is required'],
+    ['email',         'Email is required'],
+    ['streetAddress', 'Street address is required'],
+    ['city',          'City is required'],
+    ['country',       'Please select a country'],
+  ];
+
+  for (const [name, msg] of required) {
+    const val = f[name].value.trim();
+    if (!val) {
+      setFieldError(name, msg);
+      f[name].classList.add('co-invalid');
+      ok = false;
+    }
+  }
+
+  const email = f.email.value.trim();
+  if (email && !emailRe.test(email)) {
+    setFieldError('email', 'Please enter a valid email address');
+    f.email.classList.add('co-invalid');
+    ok = false;
+  }
+
+  return ok;
+}
+
 async function submitCheckout(e) {
   e.preventDefault();
   const f = e.target;
   const btn = f.querySelector('.co-submit-btn');
+
+  clearFieldErrors();
+  if (!validateCheckoutForm(f)) return;
 
   const customer = {
     firstName:     f.firstName.value.trim(),
@@ -53,6 +105,8 @@ async function submitCheckout(e) {
     phone:         f.phone.value.trim(),
     streetAddress: f.streetAddress.value.trim(),
     city:          f.city.value.trim(),
+    region:        f.region.value.trim(),
+    postalCode:    f.postalCode.value.trim(),
     country:       f.country.value,
     loyalty:       f.loyalty.checked,
   };

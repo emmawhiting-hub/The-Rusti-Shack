@@ -65,6 +65,9 @@ module.exports = async function handler(req, res) {
     if (!isValidString(customer.streetAddress, 300)) errors.push('invalid streetAddress');
     if (!isValidString(customer.city, 100))          errors.push('invalid city');
     if (!isValidString(customer.country, 100))       errors.push('invalid country');
+    // region and postalCode are optional but bounded if present
+    if (customer.region     && customer.region.length     > 100) errors.push('invalid region');
+    if (customer.postalCode && customer.postalCode.length > 20)  errors.push('invalid postalCode');
   }
 
   if (!isValidString(orderCode, 20) || !/^ORD\d{6}$/.test(orderCode)) {
@@ -115,6 +118,8 @@ module.exports = async function handler(req, res) {
         phone:         (customer.phone || '').slice(0, 50),
         streetAddress: customer.streetAddress.slice(0, 300),
         city:          customer.city.slice(0, 100),
+        region:        (customer.region     || '').slice(0, 100),
+        postalCode:    (customer.postalCode || '').slice(0, 20),
         country:       customer.country.slice(0, 100),
         loyalty:       customer.loyalty ? 'yes' : 'no',
       },
