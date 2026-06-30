@@ -1,13 +1,5 @@
 const SHIPPING_FEE_USD = 15.00;
 
-const CHECKOUT_COUNTRIES = [
-  'Philippines','United States','Australia','Germany','Japan','New Zealand',
-  'Singapore','South Korea','United Kingdom','Canada','France','Netherlands',
-  'Italy','Spain','Sweden','Norway','Denmark','Switzerland','Austria','Belgium',
-  'Hong Kong','Taiwan','China','Indonesia','Malaysia','Thailand','Vietnam',
-  'India','United Arab Emirates','Brazil','Mexico','Argentina','South Africa','Other'
-];
-
 function generateOrderCode() {
   const seq = parseInt(localStorage.getItem('rusti_order_seq') || '50005');
   const next = seq + 1;
@@ -67,35 +59,31 @@ async function submitCheckout(e) {
 
   const orderCode = generateOrderCode();
 
-  const order = {
+  // §5 — send only SKUs and quantities; the server looks up every price
+  const cartSnapshot = cart.map(item => ({
+    sku:   item.sku,
+    name:  item.name,
+    color: item.color || null,
+    size:  item.size  || null,
+    qty:   item.qty,
+    // item.price deliberately excluded — server is authoritative on price
+  }));
+
+  // Keep a minimal order record in localStorage so the success page can greet
+  // the customer by name. PII is cleared as soon as the success page renders.
+  const pendingOrder = {
     orderCode,
     date:        new Date().toISOString().split('T')[0],
     location:    'SHIP-INTL',
     associate:   'WEB',
     channel:     'Shipping',
     shippingFee: SHIPPING_FEE_USD,
-    subtotal:    cartTotal(),
-    total:       cartTotal() + SHIPPING_FEE_USD,
     payment:     'Card',
     customer,
-    lines: cart.map(item => ({
-      sku:       item.sku,
-      name:      item.name,
-      color:     item.color || null,
-      size:      item.size  || null,
-      qty:       item.qty,
-      unitPrice: item.price,
-      discount:  0,
-      lineTotal: item.price * item.qty,
-    }))
+    lines: cartSnapshot,
   };
+  localStorage.setItem('rusti_pending_order', JSON.stringify(pendingOrder));
 
-  // Persist order so success page can read it
-  const orders = JSON.parse(localStorage.getItem('rusti_orders') || '[]');
-  orders.push(order);
-  localStorage.setItem('rusti_orders', JSON.stringify(orders));
-
-  // Try Stripe hosted checkout
   btn.disabled = true;
   btn.textContent = 'Redirecting to payment…';
 
@@ -103,25 +91,23 @@ async function submitCheckout(e) {
     const res = await fetch('/.netlify/functions/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cartItems:   cart,
-        customer,
-        shippingFee: SHIPPING_FEE_USD,
-        orderCode,
-      }),
+      body: JSON.stringify({ cartItems: cartSnapshot, customer, orderCode }),
     });
 
-    if (!res.ok) throw new Error('Function error');
+    if (!res.ok) {
+      // §1 rule 9 — show vague message; server logs the detail
+      throw new Error('server error');
+    }
     const { url } = await res.json();
     cart = [];
     saveCart();
     window.location.href = url;
 
-  } catch (err) {
-    // Stripe not yet connected — fall back to local confirmation
-    cart = [];
-    saveCart();
-    showOrderConfirmation(order);
+  } catch {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> Place Order';
+    showToast('Payment setup failed — please try again or contact us.', 'error');
+    localStorage.removeItem('rusti_pending_order');
   }
 }
 
@@ -129,7 +115,6 @@ function showOrderConfirmation(order) {
   const linesHtml = order.lines.map(l =>
     `<div class="co-confirm-line">
       <span>${l.name}${l.color ? ' · ' + l.color : ''}${l.size ? ' · ' + l.size : ''} ×${l.qty}</span>
-      <span>${formatPrice(l.lineTotal)}</span>
     </div>`).join('');
 
   document.getElementById('checkout-view').innerHTML = `
@@ -142,11 +127,11 @@ function showOrderConfirmation(order) {
       </div>
       <h2>Order Received!</h2>
       <p class="co-confirm-code">${order.orderCode}</p>
-      <p class="co-confirm-msg">Thank you, ${order.customer.firstName}. We've got your order and will send shipping details to <strong>${order.customer.email}</strong>.</p>
+      <p class="co-confirm-msg">Thank you, ${order.customer.firstName}. We'll send shipping details to <strong>${order.customer.email}</strong>.</p>
       <div class="co-confirm-summary">
         ${linesHtml}
-        <div class="co-confirm-line co-confirm-ship"><span>Shipping (SHIP-INTL)</span><span>${formatPrice(order.shippingFee)}</span></div>
-        <div class="co-confirm-line co-confirm-total"><span>Total</span><span>${formatPrice(order.total)}</span></div>
+        <div class="co-confirm-line co-confirm-ship"><span>Shipping (SHIP-INTL)</span></div>
+        <div class="co-confirm-line co-confirm-total"><span>Total confirmed by payment</span></div>
       </div>
       <button class="co-confirm-btn" onclick="showHome()">Continue Shopping</button>
     </div>`;

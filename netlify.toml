@@ -3,4 +3,19 @@
 
 [functions]
   node_bundler = "esbuild"
-  included_files = ["netlify/functions/package.json"]
+
+# §8 — security headers on every response
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options     = "nosniff"
+    X-Frame-Options            = "DENY"
+    Referrer-Policy            = "strict-origin-when-cross-origin"
+    Strict-Transport-Security  = "max-age=63072000; includeSubDomains; preload"
+    Permissions-Policy         = "camera=(), microphone=(), geolocation=()"
+
+# Stripe webhook — must receive raw body, not parsed
+[[headers]]
+  for = "/.netlify/functions/stripe-webhook"
+  [headers.values]
+    Content-Type = "application/json"

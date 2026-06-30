@@ -45,19 +45,24 @@
     const orderCode = params.get('order');
     if (orderCode) {
       document.getElementById('order-code').textContent = orderCode;
-      const orders = JSON.parse(localStorage.getItem('rusti_orders') || '[]');
-      const order = orders.find(o => o.orderCode === orderCode);
-      if (order) {
+
+      // Read the pending order, render it, then immediately remove PII from
+      // localStorage — §4: store only what the business needs, as briefly as needed
+      const order = JSON.parse(localStorage.getItem('rusti_pending_order') || 'null');
+      if (order && order.orderCode === orderCode) {
         document.getElementById('success-msg').innerHTML =
           `Payment received, ${order.customer.firstName}. Shipping details will be sent to <strong>${order.customer.email}</strong>.`;
         const linesHtml = order.lines.map(l =>
-          `<div class="s-line"><span>${l.name}${l.color ? ' · ' + l.color : ''}${l.size ? ' · ' + l.size : ''} ×${l.qty}</span><span>$${(l.lineTotal).toFixed(2)}</span></div>`
+          `<div class="s-line"><span>${l.name}${l.color ? ' · ' + l.color : ''}${l.size ? ' · ' + l.size : ''} ×${l.qty}</span></div>`
         ).join('');
         const summary = document.getElementById('success-summary');
         summary.innerHTML = linesHtml +
-          `<div class="s-line s-ship"><span>Shipping (SHIP-INTL)</span><span>$${order.shippingFee.toFixed(2)}</span></div>` +
-          `<div class="s-line s-total"><span>Total</span><span>$${order.total.toFixed(2)}</span></div>`;
+          `<div class="s-line s-ship"><span>Shipping (SHIP-INTL)</span></div>` +
+          `<div class="s-line s-total"><span>Total confirmed by Stripe payment</span></div>`;
         summary.style.display = '';
+
+        // Clear PII now that it has been displayed — don't leave it sitting in storage
+        localStorage.removeItem('rusti_pending_order');
       }
     }
   </script>
