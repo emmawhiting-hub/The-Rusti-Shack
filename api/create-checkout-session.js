@@ -144,12 +144,7 @@ module.exports = async function handler(req, res) {
     // Resolve or create customer — never duplicate on email
     let customerId = null;
     try {
-      console.log('Supabase key present:', !!process.env.SUPABASE_SECRET_KEY);
-      console.log('Supabase key prefix:', (process.env.SUPABASE_SECRET_KEY || '').slice(0, 10));
       const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-      // Quick connectivity test
-      const { data: testData, error: testErr } = await supabase.from('Customers_Core').select('CustomerID').limit(1);
-      console.log('Supabase test query result:', JSON.stringify(testData), 'error:', testErr?.message);
       customerId = await resolveCustomerId(
         supabase,
         customer.email,
@@ -157,7 +152,6 @@ module.exports = async function handler(req, res) {
         customer.lastName,
         customer.loyalty,
       );
-      console.log('Customer ID resolved:', customerId);
     } catch (dbErr) {
       console.error('Customer DB lookup failed (non-fatal):', dbErr.message, dbErr.stack);
     }
@@ -212,6 +206,6 @@ module.exports = async function handler(req, res) {
 
   } catch (err) {
     console.error('Stripe session creation failed:', err.message);
-    return res.status(500).send('DEBUG: ' + err.message);
+    return res.status(500).send('Payment setup failed. Please try again.');
   }
 };
