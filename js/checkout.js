@@ -49,12 +49,26 @@ function renderCheckoutSummary() {
   document.getElementById('co-total').textContent = formatPrice(totalUSD);
 }
 
-function submitCheckout(e) {
+async function submitCheckout(e) {
   e.preventDefault();
   const f = e.target;
+  const btn = f.querySelector('.co-submit-btn');
+
+  const customer = {
+    firstName:     f.firstName.value.trim(),
+    lastName:      f.lastName.value.trim(),
+    email:         f.email.value.trim(),
+    phone:         f.phone.value.trim(),
+    streetAddress: f.streetAddress.value.trim(),
+    city:          f.city.value.trim(),
+    country:       f.country.value,
+    loyalty:       f.loyalty.checked,
+  };
+
+  const orderCode = generateOrderCode();
 
   const order = {
-    orderCode:   generateOrderCode(),
+    orderCode,
     date:        new Date().toISOString().split('T')[0],
     location:    'SHIP-INTL',
     associate:   'WEB',
@@ -63,16 +77,7 @@ function submitCheckout(e) {
     subtotal:    cartTotal(),
     total:       cartTotal() + SHIPPING_FEE_USD,
     payment:     'Card',
-    customer: {
-      firstName:     f.firstName.value.trim(),
-      lastName:      f.lastName.value.trim(),
-      email:         f.email.value.trim(),
-      phone:         f.phone.value.trim(),
-      streetAddress: f.streetAddress.value.trim(),
-      city:          f.city.value.trim(),
-      country:       f.country.value,
-      loyalty:       f.loyalty.checked,
-    },
+    customer,
     lines: cart.map(item => ({
       sku:       item.sku,
       name:      item.name,
@@ -85,13 +90,39 @@ function submitCheckout(e) {
     }))
   };
 
+  // Persist order so success page can read it
   const orders = JSON.parse(localStorage.getItem('rusti_orders') || '[]');
   orders.push(order);
   localStorage.setItem('rusti_orders', JSON.stringify(orders));
 
-  cart = [];
-  saveCart();
-  showOrderConfirmation(order);
+  // Try Stripe hosted checkout
+  btn.disabled = true;
+  btn.textContent = 'Redirecting to payment…';
+
+  try {
+    const res = await fetch('/.netlify/functions/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cartItems:   cart,
+        customer,
+        shippingFee: SHIPPING_FEE_USD,
+        orderCode,
+      }),
+    });
+
+    if (!res.ok) throw new Error('Function error');
+    const { url } = await res.json();
+    cart = [];
+    saveCart();
+    window.location.href = url;
+
+  } catch (err) {
+    // Stripe not yet connected — fall back to local confirmation
+    cart = [];
+    saveCart();
+    showOrderConfirmation(order);
+  }
 }
 
 function showOrderConfirmation(order) {
