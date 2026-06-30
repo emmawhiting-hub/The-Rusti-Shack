@@ -202,6 +202,7 @@ module.exports = async function handler(req, res) {
         postalCode:    (customer.postalCode || '').slice(0, 20),
         country:       customer.country.slice(0, 100),
         loyalty:       customer.loyalty ? 'yes' : 'no',
+        cart:          JSON.stringify(cartItems.map(i => ({ sku: i.sku, qty: i.qty }))).slice(0, 500),
       },
       success_url: `${siteOrigin}/success.html?order=${orderCode}`,
       cancel_url:  `${siteOrigin}/`,
