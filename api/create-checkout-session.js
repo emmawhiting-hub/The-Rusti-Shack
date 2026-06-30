@@ -133,14 +133,20 @@ module.exports = async function handler(req, res) {
     const siteOrigin = ALLOWED_ORIGINS.find(o => origin.startsWith(o)) || ALLOWED_ORIGINS[0];
 
     // Resolve or create customer — never duplicate on email
-    const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
-    const customerId = await resolveCustomerId(
-      supabase,
-      customer.email,
-      customer.firstName,
-      customer.lastName,
-      customer.loyalty,
-    );
+    let customerId = null;
+    try {
+      const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+      customerId = await resolveCustomerId(
+        supabase,
+        customer.email,
+        customer.firstName,
+        customer.lastName,
+        customer.loyalty,
+      );
+    } catch (dbErr) {
+      // Don't block payment if customer lookup fails — log and continue
+      console.error('Customer DB lookup failed (non-fatal):', dbErr.message);
+    }
 
     const lineItems = cartItems.map(item => ({
       price_data: {
