@@ -1,5 +1,8 @@
 const Stripe = require('stripe');
 
+// Vercel: disable body parsing so Stripe can verify the raw request signature
+module.exports.config = { api: { bodyParser: false } };
+
 // §5 — in-memory dedup for Stripe retries
 const processedEvents = new Set();
 

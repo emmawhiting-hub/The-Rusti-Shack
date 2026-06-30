@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/stripe-webhook.js": {
-      "bodyParser": false
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
