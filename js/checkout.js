@@ -115,7 +115,7 @@ async function submitCheckout(e) {
 
   // §5 — send only SKUs and quantities; the server looks up every price
   const cartSnapshot = cart.map(item => ({
-    sku:   item.sku,
+    sku:   item.parentSku || item.sku,  // server prices are keyed on parent SKU
     name:  item.name,
     color: item.color || null,
     size:  item.size  || null,
