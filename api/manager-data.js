@@ -111,11 +111,9 @@ async function handler(req, res) {
       const currentYear = new Date().getFullYear();
       const lastYear    = currentYear - 1;
 
-      const [ordersRes, linesRes, custsRes, rentalsRes, prevOrdersRes, yoyOrdersRes] = await Promise.all([
+      const [ordersRes, custsRes, rentalsRes, prevOrdersRes, yoyOrdersRes] = await Promise.all([
         sb.from('Orders').select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee')
           .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
-        sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(100000),
         sb.from('Customers_Core').select('CustomerID,Country,JoinDate').limit(50000),
         sb.from('RentalTransactions').select('RentalDate,RentalRevenue')
           .gte('RentalDate', dateFrom).lte('RentalDate', dateTo).limit(50000),
@@ -127,8 +125,12 @@ async function handler(req, res) {
       ]);
 
       const allOrders  = ordersRes.data  || [];
-      const allLines   = linesRes.data   || [];
       const allCusts   = custsRes.data   || [];
+      const dashOrderIds = allOrders.map(o=>o.OrderID);
+      const dashLinesRes = dashOrderIds.length
+        ? await sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue').in('OrderID', dashOrderIds).limit(100000)
+        : { data: [] };
+      const allLines   = dashLinesRes.data || [];
       const allRentals = rentalsRes.data || [];
 
       const sum = arr => arr.reduce((s, o) => s + parseFloat(o.OrderTotal || 0), 0);
@@ -351,11 +353,14 @@ async function handler(req, res) {
 
     // ── Products ─────────────────────────────────────────────
     if (section === 'products') {
-      const [linesRes, productsRes] = await Promise.all([
-        sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue,LineCost')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(100000),
+      const [ordersDateRes, productsRes] = await Promise.all([
+        sb.from('Orders').select('OrderID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
         sb.from('products').select('sku,name,category,subcategory,price').limit(5000),
       ]);
+      const orderIds = (ordersDateRes.data||[]).map(o=>o.OrderID);
+      const linesRes = orderIds.length
+        ? await sb.from('OrderLines').select('OrderID,ProductCode,Quantity,LineRevenue,LineCost').in('OrderID', orderIds).limit(200000)
+        : { data: [] };
 
       const meta = {};
       for (const p of (productsRes.data||[])) meta[p.sku] = p;
@@ -473,13 +478,28 @@ async function handler(req, res) {
       const orderTotals = {};
       for (const o of orderData) orderTotals[o.OrderID] = parseFloat(o.OrderTotal||0);
 
-      // Set of orderIDs that used any promo
-      const promoOrderSet = new Set(opData.map(op=>op.OrderID));
-      const orderCounts   = {};
-      const promoRevenue  = {};
+      // Set of orderIDs that used any promo — fetch their lines for discount calc
+      const promoOrderSet  = new Set(opData.map(op=>op.OrderID));
+      const promoOrderIds  = [...promoOrderSet];
+      const linesRes = promoOrderIds.length
+        ? await sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue').in('OrderID', promoOrderIds).limit(200000)
+        : { data: [] };
+
+      // Sacrificed revenue per order = sum(UnitPrice*Qty - LineRevenue) for its lines
+      const sacrificedByOrder = {};
+      for (const l of (linesRes.data||[])) {
+        const full = parseFloat(l.UnitPrice||0) * (l.Quantity||1);
+        const paid = parseFloat(l.LineRevenue||0);
+        sacrificedByOrder[l.OrderID] = (sacrificedByOrder[l.OrderID]||0) + Math.max(0, full - paid);
+      }
+
+      const orderCounts    = {};
+      const promoRevenue   = {};
+      const promoSacrificed = {};
       for (const op of opData) {
-        orderCounts[op.PromoCode]  = (orderCounts[op.PromoCode]||0) + 1;
-        promoRevenue[op.PromoCode] = (promoRevenue[op.PromoCode]||0) + (orderTotals[op.OrderID]||0);
+        orderCounts[op.PromoCode]     = (orderCounts[op.PromoCode]||0) + 1;
+        promoRevenue[op.PromoCode]    = (promoRevenue[op.PromoCode]||0) + (orderTotals[op.OrderID]||0);
+        promoSacrificed[op.PromoCode] = (promoSacrificed[op.PromoCode]||0) + (sacrificedByOrder[op.OrderID]||0);
       }
 
       // Overall effectiveness
@@ -493,6 +513,7 @@ async function handler(req, res) {
         ...p,
         orderCount: orderCounts[p.PromoCode]||0,
         revenue:    +((promoRevenue[p.PromoCode]||0).toFixed(2)),
+        sacrificed: +((promoSacrificed[p.PromoCode]||0).toFixed(2)),
         avgOrder:   orderCounts[p.PromoCode]
           ? +((promoRevenue[p.PromoCode]||0) / orderCounts[p.PromoCode]).toFixed(2)
           : 0,
@@ -542,6 +563,99 @@ async function handler(req, res) {
       const untracked  = products.filter(p=>p.status==='untracked').length;
 
       return res.json({ products, stockouts, lowStock, untracked });
+    }
+
+    // ── Financials ───────────────────────────────────────────
+    if (section === 'financials') {
+      const currentYear = new Date().getFullYear();
+      const lastYear    = currentYear - 1;
+
+      const [ordersRes, rentalsRes, custsRes, prevOrdersRes] = await Promise.all([
+        sb.from('Orders').select('OrderID,OrderDate,OrderTotal,CustID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
+        sb.from('RentalTransactions').select('RentalDate,RentalRevenue').gte('RentalDate', dateFrom).lte('RentalDate', dateTo).limit(50000),
+        sb.from('Customers_Core').select('CustomerID').limit(50000),
+        sb.from('Orders').select('OrderTotal').gte('OrderDate', `${lastYear}-01-01`).lte('OrderDate', `${lastYear}-12-31`).limit(50000),
+      ]);
+
+      const orders  = ordersRes.data  || [];
+      const rentals = rentalsRes.data || [];
+
+      // Fetch lines via two-step join
+      const orderIds = orders.map(o=>o.OrderID);
+      const linesRes = orderIds.length
+        ? await sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue,LineCost').in('OrderID', orderIds).limit(200000)
+        : { data: [] };
+      const lines = linesRes.data || [];
+
+      // Also fetch promo discount data
+      const opRes = orderIds.length
+        ? await sb.from('OrderPromotions').select('OrderID').in('OrderID', orderIds).limit(100000)
+        : { data: [] };
+      const promoOrderSet = new Set((opRes.data||[]).map(op=>op.OrderID));
+
+      const salesRevenue  = orders.reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
+      const rentalRevenue = rentals.reduce((s,r)=>s+parseFloat(r.RentalRevenue||0),0);
+      const totalRevenue  = salesRevenue + rentalRevenue;
+      const cogs          = lines.reduce((s,l)=>s+parseFloat(l.LineCost||0),0);
+      const grossProfit   = salesRevenue - cogs;
+      const grossMargin   = salesRevenue > 0 ? grossProfit/salesRevenue*100 : 0;
+      const avgOrder      = orders.length ? salesRevenue/orders.length : 0;
+
+      // Revenue sacrificed (discounts)
+      const totalSacrificed = lines.reduce((s,l)=>s+Math.max(0,parseFloat(l.UnitPrice||0)*(l.Quantity||1)-parseFloat(l.LineRevenue||0)),0);
+
+      // Revenue per customer
+      const activeCusts = new Set(orders.map(o=>o.CustID).filter(Boolean)).size;
+      const revenuePerCustomer = activeCusts > 0 ? totalRevenue/activeCusts : 0;
+
+      // Repeat customer rate
+      const custOrderCount = {};
+      for (const o of orders) custOrderCount[o.CustID] = (custOrderCount[o.CustID]||0)+1;
+      const totalCusts  = Object.keys(custOrderCount).length;
+      const repeatCusts = Object.values(custOrderCount).filter(n=>n>=2).length;
+      const repeatRate  = totalCusts > 0 ? repeatCusts/totalCusts*100 : 0;
+
+      // YoY growth
+      const prevRevenue = (prevOrdersRes.data||[]).reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
+      const yoyGrowth   = prevRevenue > 0 ? (salesRevenue - prevRevenue)/prevRevenue*100 : null;
+
+      // Monthly revenue + gross profit
+      const monthlyMap = {};
+      for (const o of orders) {
+        const m = o.OrderDate.slice(0,7);
+        if (!monthlyMap[m]) monthlyMap[m] = { revenue:0, cost:0 };
+        monthlyMap[m].revenue += parseFloat(o.OrderTotal||0);
+      }
+      // Distribute costs to months via order dates
+      const orderDateMap = {};
+      for (const o of orders) orderDateMap[o.OrderID] = o.OrderDate.slice(0,7);
+      for (const l of lines) {
+        const m = orderDateMap[l.OrderID];
+        if (m && monthlyMap[m]) monthlyMap[m].cost += parseFloat(l.LineCost||0);
+      }
+      const monthly = Object.entries(monthlyMap).sort().map(([month,v])=>({
+        month,
+        revenue:     +v.revenue.toFixed(2),
+        grossProfit: +(v.revenue - v.cost).toFixed(2),
+        margin:      v.revenue > 0 ? +((v.revenue-v.cost)/v.revenue*100).toFixed(1) : 0,
+      }));
+
+      return res.json({
+        totalRevenue:        +totalRevenue.toFixed(2),
+        salesRevenue:        +salesRevenue.toFixed(2),
+        rentalRevenue:       +rentalRevenue.toFixed(2),
+        cogs:                +cogs.toFixed(2),
+        grossProfit:         +grossProfit.toFixed(2),
+        grossMargin:         +grossMargin.toFixed(2),
+        avgOrder:            +avgOrder.toFixed(2),
+        revenuePerCustomer:  +revenuePerCustomer.toFixed(2),
+        totalSacrificed:     +totalSacrificed.toFixed(2),
+        sacrificedPct:       totalRevenue > 0 ? +(totalSacrificed/totalRevenue*100).toFixed(2) : 0,
+        rentalPct:           totalRevenue > 0 ? +(rentalRevenue/totalRevenue*100).toFixed(2)   : 0,
+        repeatRate:          +repeatRate.toFixed(2),
+        yoyGrowth,
+        monthly,
+      });
     }
 
     return res.status(400).json({ error: 'Unknown section' });

@@ -51,7 +51,7 @@
   .nav-section{padding:12px 20px 4px;font-size:10px;color:var(--muted2);letter-spacing:.08em;text-transform:uppercase}
 
   /* Restock banner */
-  .restock-banner{display:none;position:fixed;top:var(--topbar);left:var(--sidebar);right:0;z-index:80;background:#fff3e0;border-bottom:2px solid var(--orange);padding:10px 24px;font-size:13px;display:flex;align-items:center;gap:10px}
+  .restock-banner{display:none;position:fixed;top:var(--topbar);left:var(--sidebar);right:0;z-index:80;background:#fff3e0;border-bottom:2px solid var(--orange);padding:10px 24px;font-size:13px;align-items:center;gap:10px}
   .restock-banner.visible{display:flex}
   .restock-banner .rb-icon{font-size:16px}
   .restock-banner .rb-msg{flex:1;color:var(--text)}
@@ -204,6 +204,8 @@
     <div class="nav-item" data-section="inventory"><span class="icon">&#9679;</span> Inventory</div>
     <div class="nav-item" data-section="rentals"><span class="icon">&#9679;</span> Rentals</div>
     <div class="nav-item" data-section="promos"><span class="icon">&#9679;</span> Promotions</div>
+    <div class="nav-section">Finance</div>
+    <div class="nav-item" data-section="financials"><span class="icon">&#9679;</span> Financials</div>
   </div>
 
   <div class="main">
@@ -392,9 +394,9 @@
             <th onclick="sortTable('inv',0,'str')">SKU <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('inv',1,'str')">Name <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('inv',2,'str')">Category <span class="sa">&#8645;</span></th>
-            <th>Stock Qty</th>
-            <th>Reorder At</th>
-            <th>Status</th>
+            <th onclick="sortTable('inv',3,'num')">Stock Qty <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',4,'num')">Reorder At <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',5,'str')">Status <span class="sa">&#8645;</span></th>
             <th>Last Updated</th>
             <th></th>
           </tr></thead>
@@ -458,11 +460,48 @@
         <div class="table-card">
           <div class="table-toolbar"><h3>All Promotions</h3></div>
           <table><thead><tr>
-            <th>Code</th><th>Name</th><th>Type</th><th>Discount</th>
-            <th>Start</th><th>End</th><th>Channel</th>
-            <th>Orders</th><th>Revenue</th><th>Avg Order</th>
+            <th onclick="sortTable('promo',0,'str')">Code <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',1,'str')">Name <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',2,'str')">Type <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',3,'num')">Discount <span class="sa">&#8645;</span></th>
+            <th>Start</th><th>End</th>
+            <th onclick="sortTable('promo',4,'str')">Channel <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',5,'num')">Orders <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',6,'num')">Revenue <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',7,'num')">Rev. Sacrificed <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',8,'num')">Avg Order <span class="sa">&#8645;</span></th>
           </tr></thead>
           <tbody id="promos-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financials -->
+    <div class="section" id="sec-financials">
+      <div class="section-header"><div class="section-title">Financials</div></div>
+      <div id="financials-loading" class="spinner"></div>
+      <div id="financials-content" style="display:none">
+        <div class="kpi-grid" id="fin-kpis"></div>
+        <div class="chart-row cols-2">
+          <div class="chart-card" style="grid-column:span 2">
+            <h3>Monthly Revenue vs Gross Profit</h3>
+            <div class="chart-wrap tall"><canvas id="chartFinMonthly"></canvas></div>
+          </div>
+        </div>
+        <div class="chart-row cols-2">
+          <div class="chart-card">
+            <h3>Revenue Mix</h3>
+            <div class="chart-wrap"><canvas id="chartFinMix"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>Gross Margin % by Month</h3>
+            <div class="chart-wrap"><canvas id="chartFinMargin"></canvas></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><h3>Key Ratios &amp; Health Metrics</h3></div>
+          <table><thead><tr><th>Metric</th><th>Value</th><th>Notes</th></tr></thead>
+          <tbody id="fin-ratios"></tbody></table>
         </div>
       </div>
     </div>
@@ -618,6 +657,7 @@ async function loadSection(sec) {
   if (sec === 'inventory')  await loadInventory();
   if (sec === 'rentals')    await loadRentals();
   if (sec === 'promos')     await loadPromos();
+  if (sec === 'financials') await loadFinancials();
   _loaded[sec] = true;
 }
 
@@ -1128,10 +1168,12 @@ async function loadRentals() {
 }
 
 // ── Promos ─────────────────────────────────────────────────────────
+let _promosData = [];
 async function loadPromos() {
   show('promos-loading'); hide('promos-content');
   try {
     const d = await api({ section: 'promos' });
+    _promosData = d.promos || [];
     const ef = d.effectiveness || {};
     hide('promos-loading'); show('promos-content');
 
@@ -1150,7 +1192,7 @@ async function loadPromos() {
       options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}
     });
 
-    const top20 = (d.promos || []).slice(0, 20);
+    const top20 = _promosData.slice(0, 20);
     mkChart('chartPromos', { type:'bar', data:{
         labels:top20.map(p=>p.PromoCode),
         datasets:[{data:top20.map(p=>p.orderCount),backgroundColor:'#E8622A',borderRadius:4}]
@@ -1158,18 +1200,81 @@ async function loadPromos() {
       options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}
     });
 
-    document.getElementById('promos-body').innerHTML = (d.promos||[]).map(p => `
-      <tr>
-        <td><span style="color:var(--teal);font-family:monospace">${p.PromoCode}</span></td>
-        <td>${p.PromoName||'—'}</td><td>${p.PromoType||'—'}</td>
-        <td>${p.DiscountPct?p.DiscountPct+'%':'—'}</td>
-        <td>${p.StartDate||'—'}</td><td>${p.EndDate||'—'}</td>
-        <td>${p.Channel||'All'}</td>
-        <td><strong>${p.orderCount}</strong></td>
-        <td>$${fmt(p.revenue)}</td>
-        <td>$${fmt(p.avgOrder)}</td>
-      </tr>`).join('');
+    renderPromosTable();
   } catch (e) { document.getElementById('promos-loading').innerHTML = err(e); }
+}
+
+function renderPromosTable() {
+  document.getElementById('promos-body').innerHTML = _promosData.map(p => {
+    const roi = p.sacrificed > 0 ? (p.revenue / p.sacrificed).toFixed(1) : '—';
+    return `<tr>
+      <td><span style="color:var(--teal);font-family:monospace">${p.PromoCode}</span></td>
+      <td>${p.PromoName||'—'}</td><td>${p.PromoType||'—'}</td>
+      <td>${p.DiscountPct?p.DiscountPct+'%':'—'}</td>
+      <td>${p.StartDate||'—'}</td><td>${p.EndDate||'—'}</td>
+      <td>${p.Channel||'All'}</td>
+      <td><strong>${p.orderCount}</strong></td>
+      <td>$${fmt(p.revenue)}</td>
+      <td style="color:var(--coral)">$${fmt(p.sacrificed)}</td>
+      <td>$${fmt(p.avgOrder)} <span style="font-size:11px;color:${roi!=='—'&&+roi>=3?'var(--teal)':'var(--muted)'}"> ${roi!=='—'?'('+roi+'x ROI)':''}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Financials ──────────────────────────────────────────────────────
+async function loadFinancials() {
+  show('financials-loading'); hide('financials-content');
+  try {
+    const d = await api({ section: 'financials' });
+    hide('financials-loading'); show('financials-content');
+
+    const gm = d.grossMargin || 0;
+    document.getElementById('fin-kpis').innerHTML = `
+      <div class="kpi"><div class="kpi-label">Total Revenue</div><div class="kpi-value">$${fmt(d.totalRevenue)}</div><div class="kpi-sub">Sales + Rentals</div></div>
+      <div class="kpi coral"><div class="kpi-label">COGS</div><div class="kpi-value">$${fmt(d.cogs)}</div><div class="kpi-sub">Cost of goods sold</div></div>
+      <div class="kpi" style="--accent:var(--teal)"><div class="kpi-label">Gross Profit</div><div class="kpi-value">$${fmt(d.grossProfit)}</div><div class="kpi-sub">${gm.toFixed(1)}% margin</div></div>
+      <div class="kpi gold"><div class="kpi-label">Avg Order Value</div><div class="kpi-value">$${fmt(d.avgOrder)}</div></div>
+      <div class="kpi"><div class="kpi-label">Revenue / Customer</div><div class="kpi-value">$${fmt(d.revenuePerCustomer)}</div><div class="kpi-sub">Active customers</div></div>
+      <div class="kpi coral"><div class="kpi-label">Rev. Sacrificed</div><div class="kpi-value">$${fmt(d.totalSacrificed)}</div><div class="kpi-sub">Total promo discounts</div></div>
+    `;
+
+    const months = (d.monthly||[]).map(r=>r.month);
+    mkChart('chartFinMonthly', { type:'bar', data:{ labels:months, datasets:[
+        { label:'Revenue', data:d.monthly.map(r=>r.revenue), backgroundColor:'rgba(0,180,160,.6)', borderRadius:3 },
+        { label:'Gross Profit', data:d.monthly.map(r=>r.grossProfit), backgroundColor:'rgba(26,122,158,.7)', borderRadius:3 },
+      ]}, options:{...baseOpts(), scales:{
+        x:{ticks:{color:'#6b7a8d'},grid:{display:false}},
+        y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}
+      }}
+    });
+
+    mkChart('chartFinMix', { type:'doughnut', data:{
+        labels:['Product Sales','Rental Revenue'],
+        datasets:[{data:[+d.salesRevenue,+d.rentalRevenue],backgroundColor:['#00B4A0','#1A7A9E'],borderWidth:0}]
+      }, options:{...baseOpts(),cutout:'65%',plugins:{legend:{position:'right',labels:{color:'#6b7a8d',boxWidth:12}},tooltip:{callbacks:{label:c=>' $'+fmt(c.raw)}}}}
+    });
+
+    mkChart('chartFinMargin', { type:'line', data:{ labels:months, datasets:[{
+        label:'Gross Margin %', data:d.monthly.map(r=>r.margin),
+        borderColor:'#E8622A', backgroundColor:'rgba(232,98,42,.1)', fill:true, tension:.35, pointRadius:2
+      }]}, options:{...baseOpts(), scales:{
+        x:{ticks:{color:'#6b7a8d'},grid:{display:false}},
+        y:{ticks:{callback:v=>v+'%',color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}
+      }, plugins:{legend:{display:false}}}
+    });
+
+    const yoyGrowth = d.yoyGrowth != null ? (d.yoyGrowth >= 0 ? '+' : '') + d.yoyGrowth.toFixed(1) + '%' : 'N/A';
+    document.getElementById('fin-ratios').innerHTML = [
+      ['Gross Margin',        (gm).toFixed(1)+'%',                    'Revenue minus COGS ÷ Revenue'],
+      ['YoY Revenue Growth',  yoyGrowth,                               'vs same period last year'],
+      ['Avg Order Value',     '$'+fmt(d.avgOrder),                    'Total orders revenue ÷ order count'],
+      ['Revenue per Customer','$'+fmt(d.revenuePerCustomer),          'Total revenue ÷ active customers'],
+      ['Rental / Sales Mix',  (d.rentalPct||0).toFixed(1)+'%',       'Rental revenue as % of total'],
+      ['Promo Discount Rate', (d.sacrificedPct||0).toFixed(1)+'%',   'Revenue sacrificed ÷ gross revenue'],
+      ['Repeat Customer Rate',(d.repeatRate||0).toFixed(1)+'%',      'Customers with 2+ orders'],
+    ].map(([m,v,n])=>`<tr><td><strong>${m}</strong></td><td style="font-weight:700;color:var(--navy)">${v}</td><td style="color:var(--muted);font-size:12px">${n}</td></tr>`).join('');
+
+  } catch (e) { document.getElementById('financials-loading').innerHTML = err(e); }
 }
 
 // ── Sort ────────────────────────────────────────────────────────────
@@ -1183,7 +1288,8 @@ function sortTable(key, col, type) {
     if (key==='orders') return [item.OrderID,item.OrderDate,item.customerName,item.country,item.Channel,parseFloat(item.OrderTotal)][col];
     if (key==='cust')   return [item.CustomerID,item.FirstName+' '+item.LastName,item.Country,item.CustomerType,item.loyalty?'Yes':'No',item.orderCount,parseFloat(item.lifetimeValue),item.lastOrder][col];
     if (key==='prod')   return [item.sku,item.name,item.category,item.units,item.revenue,item.margin][col];
-    if (key==='inv')    return [item.sku,item.name,item.category][col];
+    if (key==='inv')    return [item.sku,item.name,item.category,item.stockQty??-1,item.reorderLevel??-1,item.status][col];
+    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.sacrificed),parseFloat(item.avgOrder)][col];
     return '';
   }
   const cmp = (a,b) => {
@@ -1195,6 +1301,7 @@ function sortTable(key, col, type) {
   if (key==='cust')   { _custsFiltered.sort(cmp);  renderCustTable(); }
   if (key==='prod')   { _prodsFiltered.sort(cmp);  renderProdsTable(); }
   if (key==='inv')    { _invFiltered.sort(cmp);    renderInvTable(); }
+  if (key==='promo')  { _promosData.sort(cmp);     renderPromosTable(); }
 }
 
 // ── CSV ─────────────────────────────────────────────────────────────
