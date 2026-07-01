@@ -7,42 +7,48 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a;
-    --border:#2e3250; --teal:#00c9a7; --teal2:#00a688;
-    --coral:#ff6b6b; --gold:#ffd166; --purple:#a78bfa;
-    --blue:#60a5fa; --text:#e2e8f0; --muted:#8892b0;
+    --bg:#FEF9F1; --surface:#ffffff; --surface2:#f5f0e8;
+    --border:#e2d9cc; --teal:#00B4A0; --teal2:#00a08e;
+    --teal-light:#DFF5F2;
+    --navy:#1A7A9E; --navy-dark:#0F5E7A;
+    --orange:#E8622A; --orange-dk:#c94e1e;
+    --coral:#F4845F;
+    --gold:#D99A2A; --purple:#1A7A9E; --blue:#1A7A9E;
+    --text:#1a2332; --muted:#6b7a8d; --muted2:#9aabbf;
     --sidebar:220px; --topbar:60px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px}
 
   /* Login */
-  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh}
-  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px;width:360px;text-align:center}
-  .login-box h1{font-size:22px;margin-bottom:6px}
+  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 60%,var(--teal) 100%)}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 40px;width:360px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+  .login-box h1{font-size:22px;margin-bottom:6px;color:var(--navy-dark)}
   .login-box p{color:var(--muted);margin-bottom:28px;font-size:13px}
-  .login-box input{width:100%;padding:11px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px;margin-bottom:12px}
-  .login-box button{width:100%;padding:11px;border-radius:8px;border:none;background:var(--teal);color:#000;font-weight:700;cursor:pointer;font-size:14px}
-  .login-box button:hover{background:var(--teal2)}
+  .login-box input{width:100%;padding:11px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:12px;font-family:inherit}
+  .login-box input:focus{outline:none;border-color:var(--teal)}
+  .login-box button{width:100%;padding:11px;border-radius:8px;border:none;background:var(--orange);color:#fff;font-weight:700;cursor:pointer;font-size:14px}
+  .login-box button:hover{background:var(--orange-dk)}
   #login-err{color:var(--coral);font-size:12px;margin-top:8px;min-height:18px}
 
   /* Shell */
   #app{display:none;height:100vh;overflow:hidden}
-  .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;z-index:100}
-  .topbar-logo{font-weight:800;font-size:15px;color:var(--teal);white-space:nowrap}
-  .topbar-logo span{color:var(--text)}
+  .topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar);background:linear-gradient(135deg,var(--navy-dark) 0%,var(--navy) 60%,var(--teal) 100%);border-bottom:none;display:flex;align-items:center;padding:0 24px;gap:16px;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .topbar-logo{font-weight:800;font-size:15px;color:#fff;white-space:nowrap}
+  .topbar-logo span{color:rgba(255,255,255,.75)}
   .topbar-spacer{flex:1}
   .date-filter{display:flex;gap:4px}
-  .date-btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px;transition:all .15s}
-  .date-btn.active{background:var(--teal);border-color:var(--teal);color:#000;font-weight:700}
-  .date-btn:hover:not(.active){border-color:var(--teal);color:var(--teal)}
+  .date-btn{padding:5px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:transparent;color:rgba(255,255,255,.75);cursor:pointer;font-size:12px;transition:all .15s}
+  .date-btn.active{background:var(--orange);border-color:var(--orange);color:#fff;font-weight:700}
+  .date-btn:hover:not(.active){border-color:#fff;color:#fff}
 
-  .sidebar{position:fixed;top:var(--topbar);left:0;bottom:0;width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);padding:16px 0;overflow-y:auto;z-index:90}
+  .sidebar{position:fixed;top:var(--topbar);left:0;bottom:0;width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);padding:16px 0;overflow-y:auto;z-index:90;box-shadow:2px 0 8px rgba(0,0,0,.06)}
   .nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:var(--muted);font-size:13px;border-radius:6px;margin:2px 8px;transition:all .15s}
-  .nav-item:hover{background:var(--surface2);color:var(--text)}
-  .nav-item.active{background:var(--teal);color:#000;font-weight:700}
-  .nav-item .icon{font-size:16px;width:20px;text-align:center}
-  .nav-section{padding:12px 20px 4px;font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+  .nav-item:hover{background:var(--teal-light);color:var(--navy)}
+  .nav-item.active{background:var(--teal-light);color:var(--teal);font-weight:700;border-left:3px solid var(--teal)}
+  .nav-item .icon{font-size:14px;width:18px;text-align:center;color:var(--navy)}
+  .nav-item.active .icon{color:var(--teal)}
+  .nav-section{padding:12px 20px 4px;font-size:10px;color:var(--muted2);letter-spacing:.08em;text-transform:uppercase}
 
   .main{margin-top:var(--topbar);margin-left:var(--sidebar);padding:28px 32px;overflow-y:auto;height:calc(100vh - var(--topbar))}
   .section{display:none}
@@ -95,14 +101,14 @@
   th.sorted .sa{opacity:1;color:var(--teal)}
   td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
   tr:last-child td{border-bottom:none}
-  tr.flag-row{background:rgba(255,107,107,.06)}
+  tr.flag-row{background:rgba(232,98,42,.06)}
   tr.expand-trigger:hover td{background:rgba(255,255,255,.03);cursor:pointer}
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
   .badge-teal{background:rgba(0,201,167,.15);color:var(--teal)}
   .badge-coral{background:rgba(255,107,107,.15);color:var(--coral)}
   .badge-gold{background:rgba(255,209,102,.15);color:var(--gold)}
-  .badge-purple{background:rgba(167,139,250,.15);color:var(--purple)}
-  .badge-blue{background:rgba(96,165,250,.15);color:var(--blue)}
+  .badge-purple{background:rgba(26,122,158,.15);color:var(--purple)}
+  .badge-blue{background:rgba(96,165,250,.15);color:var(--navy)}
   .badge-grey{background:rgba(136,146,176,.15);color:var(--muted)}
   .badge-coral.clickable{cursor:pointer;text-decoration:underline dotted}
   .badge-coral.clickable:hover{background:rgba(255,107,107,.3)}
@@ -113,7 +119,7 @@
   .expand-inner{background:var(--surface2);padding:12px 16px;border-bottom:1px solid var(--border)}
   .expand-inner table{background:transparent}
   .expand-inner th,.expand-inner td{font-size:12px;padding:6px 10px}
-  .expand-inner thead th{background:rgba(0,0,0,.2)}
+  .expand-inner thead th{background:var(--surface2)}
 
   /* Modal */
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center}
@@ -155,8 +161,8 @@
 
 <div id="login-screen">
   <div class="login-box">
-    <h1>&#127754; Rusti Shack</h1>
-    <p>Manager Portal &#8212; Staff Only</p>
+    <h1>Rusti Shack</h1>
+    <p>Manager Portal &mdash; Staff Only</p>
     <input type="password" id="pw-input" placeholder="Password" autofocus>
     <button onclick="doLogin()">Sign In</button>
     <div id="login-err"></div>
@@ -165,7 +171,7 @@
 
 <div id="app">
   <div class="topbar">
-    <div class="topbar-logo">&#127754; Rusti <span>Shack</span></div>
+    <div class="topbar-logo">Rusti <span>Shack</span> &mdash; Manager</div>
     <div class="topbar-spacer"></div>
     <div class="date-filter">
       <button class="date-btn" data-days="7">7D</button>
@@ -178,15 +184,15 @@
 
   <div class="sidebar">
     <div class="nav-section">Analytics</div>
-    <div class="nav-item active" data-section="dashboard"><span class="icon">&#128202;</span> Dashboard</div>
+    <div class="nav-item active" data-section="dashboard"><span class="icon">&#9679;</span> Dashboard</div>
     <div class="nav-section">Operations</div>
-    <div class="nav-item" data-section="orders"><span class="icon">&#128230;</span> Orders</div>
-    <div class="nav-item" data-section="customers"><span class="icon">&#128101;</span> Customers</div>
+    <div class="nav-item" data-section="orders"><span class="icon">&#9679;</span> Orders</div>
+    <div class="nav-item" data-section="customers"><span class="icon">&#9679;</span> Customers</div>
     <div class="nav-section">Catalog</div>
-    <div class="nav-item" data-section="products"><span class="icon">&#127940;</span> Products</div>
-    <div class="nav-item" data-section="inventory"><span class="icon">&#128218;</span> Inventory</div>
-    <div class="nav-item" data-section="rentals"><span class="icon">&#129347;</span> Rentals</div>
-    <div class="nav-item" data-section="promos"><span class="icon">&#127903;</span> Promotions</div>
+    <div class="nav-item" data-section="products"><span class="icon">&#9679;</span> Products</div>
+    <div class="nav-item" data-section="inventory"><span class="icon">&#9679;</span> Inventory</div>
+    <div class="nav-item" data-section="rentals"><span class="icon">&#9679;</span> Rentals</div>
+    <div class="nav-item" data-section="promos"><span class="icon">&#9679;</span> Promotions</div>
   </div>
 
   <div class="main">
@@ -590,8 +596,8 @@ function baseOpts() {
   return {
     responsive: true, maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: '#8892b0', font: { size: 11 } } },
-      tooltip: { backgroundColor: '#22263a', borderColor: '#2e3250', borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#8892b0' }
+      legend: { labels: { color: '#6b7a8d', font: { size: 11 } } },
+      tooltip: { backgroundColor: '#1a2332', borderColor: '#e2d9cc', borderWidth: 1, titleColor: '#ffffff', bodyColor: '#9aabbf' }
     },
     animation: { duration: 500 }
   };
@@ -656,12 +662,12 @@ function renderTrendChart(d) {
   const labels = data.map(r => _trendMonthly ? r.month : r.date);
   mkChart('chartTrend', {
     type: 'line', data: { labels, datasets: [
-      { label: 'Sales',   data: data.map(r => r.sales),  borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,.1)',  fill: true, tension: .35, pointRadius: 0 },
-      { label: 'Rentals', data: data.map(r => r.rental), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,.1)', fill: true, tension: .35, pointRadius: 0 },
+      { label: 'Sales',   data: data.map(r => r.sales),  borderColor: '#00B4A0', backgroundColor: 'rgba(0,180,160,.1)',  fill: true, tension: .35, pointRadius: 0 },
+      { label: 'Rentals', data: data.map(r => r.rental), borderColor: '#1A7A9E', backgroundColor: 'rgba(26,122,158,.1)', fill: true, tension: .35, pointRadius: 0 },
     ]},
     options: { ...baseOpts(), scales: {
-      x: { ticks: { maxTicksLimit: 12, color: '#8892b0' }, grid: { color: 'rgba(255,255,255,.04)' } },
-      y: { ticks: { callback: v => '$' + fmt(v), color: '#8892b0' }, grid: { color: 'rgba(255,255,255,.04)' } }
+      x: { ticks: { maxTicksLimit: 12, color: '#8892b0' }, grid: { color: 'rgba(0,0,0,.06)' } },
+      y: { ticks: { callback: v => '$' + fmt(v), color: '#8892b0' }, grid: { color: 'rgba(0,0,0,.06)' } }
     }}
   });
 }
@@ -680,12 +686,12 @@ function renderYOYChart(yoy) {
   const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   mkChart('chartYOY', {
     type: 'line', data: { labels: monthLabels, datasets: [
-      { label: String(yoy.currentYear), data: yoy.current,  borderColor: '#00c9a7', backgroundColor: 'rgba(0,201,167,.08)',  fill: true, tension: .35, pointRadius: 3 },
-      { label: String(yoy.lastYear),    data: yoy.previous, borderColor: '#8892b0', backgroundColor: 'rgba(136,146,176,.08)', fill: true, tension: .35, pointRadius: 3, borderDash: [4,3] },
+      { label: String(yoy.currentYear), data: yoy.current,  borderColor: '#00B4A0', backgroundColor: 'rgba(0,180,160,.08)',  fill: true, tension: .35, pointRadius: 3 },
+      { label: String(yoy.lastYear),    data: yoy.previous, borderColor: '#8892b0', backgroundColor: 'rgba(107,122,141,.08)', fill: true, tension: .35, pointRadius: 3, borderDash: [4,3] },
     ]},
     options: { ...baseOpts(), scales: {
-      x: { ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,.04)' } },
-      y: { ticks: { callback: v => '$' + fmt(v), color: '#8892b0' }, grid: { color: 'rgba(255,255,255,.04)' } }
+      x: { ticks: { color: '#8892b0' }, grid: { color: 'rgba(0,0,0,.06)' } },
+      y: { ticks: { callback: v => '$' + fmt(v), color: '#8892b0' }, grid: { color: 'rgba(0,0,0,.06)' } }
     }}
   });
 }
@@ -694,7 +700,7 @@ function renderChannelChart(d) {
   mkChart('chartChannel', {
     type: 'doughnut', data: {
       labels: ['In-Store', 'Shipping', 'Rentals'],
-      datasets: [{ data: [+d.instoreRevenue, +d.shippingRevenue, +d.rentalRevenue], backgroundColor: ['#00c9a7', '#60a5fa', '#a78bfa'], borderWidth: 0 }]
+      datasets: [{ data: [+d.instoreRevenue, +d.shippingRevenue, +d.rentalRevenue], backgroundColor: ['#00B4A0', '#00B4A0', '#1A7A9E'], borderWidth: 0 }]
     },
     options: { ...baseOpts(), cutout: '65%', plugins: {
       legend: { position: 'right', labels: { color: '#8892b0', boxWidth: 12 } },
@@ -706,8 +712,8 @@ function renderChannelChart(d) {
 function renderDOWChart(d) {
   mkChart('chartDOW', { type: 'bar', data: {
       labels: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
-      datasets: [{ data: d.dowCounts, backgroundColor: '#60a5fa', borderRadius: 4 }]
-    }, options: { ...baseOpts(), scales: { x:{ticks:{color:'#8892b0'},grid:{display:false}}, y:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}} }, plugins:{legend:{display:false}} }
+      datasets: [{ data: d.dowCounts, backgroundColor: '#00B4A0', borderRadius: 4 }]
+    }, options: { ...baseOpts(), scales: { x:{ticks:{color:'#6b7a8d'},grid:{display:false}}, y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}} }, plugins:{legend:{display:false}} }
   });
 }
 
@@ -715,8 +721,8 @@ function renderCountriesChart(d) {
   const top = d.topCountries || [];
   mkChart('chartCountries', { type: 'bar', data: {
       labels: top.map(r => r.country),
-      datasets: [{ data: top.map(r => r.count), backgroundColor: '#ffd166', borderRadius: 4 }]
-    }, options: { ...baseOpts(), indexAxis: 'y', scales: { x:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}, y:{ticks:{color:'#8892b0'},grid:{display:false}} }, plugins:{legend:{display:false}} }
+      datasets: [{ data: top.map(r => r.count), backgroundColor: '#D99A2A', borderRadius: 4 }]
+    }, options: { ...baseOpts(), indexAxis: 'y', scales: { x:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}, y:{ticks:{color:'#6b7a8d'},grid:{display:false}} }, plugins:{legend:{display:false}} }
   });
 }
 
@@ -732,8 +738,8 @@ function renderAOVChart(d) {
   const labels = monthly.map(r => r.month);
   mkChart('chartAOV', { type: 'line', data: { labels, datasets: [{
       label: 'Avg Order Value', data: labels.map(m => counts[m] ? +(totals[m] / counts[m]).toFixed(2) : 0),
-      borderColor: '#ffd166', backgroundColor: 'rgba(255,209,102,.1)', fill: true, tension: .35, pointRadius: 0
-    }]}, options: { ...baseOpts(), scales: { x:{ticks:{maxTicksLimit:10,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}, y:{ticks:{callback:v=>'$'+v,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}} }, plugins:{legend:{display:false}} }
+      borderColor: '#D99A2A', backgroundColor: 'rgba(217,154,42,.1)', fill: true, tension: .35, pointRadius: 0
+    }]}, options: { ...baseOpts(), scales: { x:{ticks:{maxTicksLimit:10,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}, y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}} }, plugins:{legend:{display:false}} }
   });
 }
 
@@ -798,7 +804,7 @@ function renderOrdersTable() {
       <tr class="expand-trigger ${o.needsAttention && !isShipped ? 'flag-row' : ''}" onclick="toggleOrderLines('${o.OrderID}')">
         <td><span style="color:var(--teal)">${o.OrderID}</span></td>
         <td>${o.OrderDate}</td>
-        <td><span style="cursor:pointer;color:var(--blue)" onclick="event.stopPropagation();openCustModal('${o.customerId || ''}','${escQ(o.customerName || '')}')">${o.customerName || '—'}</span></td>
+        <td><span style="cursor:pointer;color:var(--navy)" onclick="event.stopPropagation();openCustModal('${o.customerId || ''}','${escQ(o.customerName || '')}')">${o.customerName || '—'}</span></td>
         <td>${o.country || '—'}</td>
         <td>${chBadge(o.Channel)}</td>
         <td>$${fmt(o.OrderTotal)}</td>
@@ -818,7 +824,7 @@ async function toggleOrderLines(orderId) {
   try {
     const d = await fetch('/api/manager-data?section=order_detail&order_id=' + encodeURIComponent(orderId) + '&from=2021-01-01&to=' + _dateTo, { headers: { 'x-manager-token': _token } }).then(r => r.json());
     const promoHtml = d.promos && d.promos.length
-      ? `<p style="margin-top:8px;font-size:11px;color:var(--gold)">Promo codes: ${d.promos.map(p => p.PromoCode).join(', ')}</p>` : '';
+      ? `<p style="margin-top:8px;font-size:11px;color:var(--orange)">Promo codes: ${d.promos.map(p => p.PromoCode).join(', ')}</p>` : '';
     inner.innerHTML = `<table><thead><tr><th>#</th><th>SKU</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Line Total</th></tr></thead><tbody>
       ${(d.lines || []).map(l => `<tr><td>${l.LineNumber}</td><td>${l.ProductCode}</td><td>${l.Quantity}</td><td>$${fmt(l.UnitPrice)}</td><td>${l.DiscountPct || 0}%</td><td>$${fmt(l.LineRevenue)}</td></tr>`).join('')}
     </tbody></table>${promoHtml}`;
@@ -868,24 +874,24 @@ async function loadCustomers() {
       <div class="kpi gold"><div class="kpi-label">Non-Loyalty</div><div class="kpi-value">${d.noLoyaltyCount}</div><div class="kpi-sub">Avg LTV $${fmt(d.noLoyaltyAvgLTV)}</div></div>
     `;
 
-    mkChart('chartNewCusts', { type:'bar', data:{ labels:d.newByMonth.map(r=>r.month), datasets:[{data:d.newByMonth.map(r=>r.count),backgroundColor:'#60a5fa',borderRadius:4}]},
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartNewCusts', { type:'bar', data:{ labels:d.newByMonth.map(r=>r.month), datasets:[{data:d.newByMonth.map(r=>r.count),backgroundColor:'#00B4A0',borderRadius:4}]},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
 
-    mkChart('chartLoyalty', { type:'bar', data:{ labels:['Loyalty','Non-Loyalty'], datasets:[{data:[+d.loyaltyAvgLTV,+d.noLoyaltyAvgLTV],backgroundColor:['#00c9a7','#ff6b6b'],borderRadius:6}]},
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{callback:v=>'$'+v,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartLoyalty', { type:'bar', data:{ labels:['Loyalty','Non-Loyalty'], datasets:[{data:[+d.loyaltyAvgLTV,+d.noLoyaltyAvgLTV],backgroundColor:['#00B4A0','#E8622A'],borderRadius:6}]},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
 
     // Retention cohort chart
     if (d.retention && d.retention.length) {
       mkChart('chartRetention', { type:'bar', data:{
           labels: d.retention.map(r => r.year),
           datasets: [
-            { label: 'Retained', data: d.retention.map(r => r.retained), backgroundColor: '#00c9a7', borderRadius: 4 },
-            { label: 'Did Not Return', data: d.retention.map(r => r.total - r.retained), backgroundColor: '#2e3250', borderRadius: 4 },
+            { label: 'Retained', data: d.retention.map(r => r.retained), backgroundColor: '#00B4A0', borderRadius: 4 },
+            { label: 'Did Not Return', data: d.retention.map(r => r.total - r.retained), backgroundColor: '#e2d9cc', borderRadius: 4 },
           ]
         },
         options: { ...baseOpts(), scales: {
             x: { stacked: true, ticks: { color: '#8892b0' }, grid: { display: false } },
-            y: { stacked: true, ticks: { color: '#8892b0' }, grid: { color: 'rgba(255,255,255,.04)' } }
+            y: { stacked: true, ticks: { color: '#8892b0' }, grid: { color: 'rgba(0,0,0,.06)' } }
           },
           plugins: {
             legend: { labels: { color: '#8892b0', boxWidth: 12 } },
@@ -899,8 +905,8 @@ async function loadCustomers() {
       });
     }
 
-    mkChart('chartCustCountries', { type:'bar', data:{ labels:d.countryDist.map(r=>r.country), datasets:[{data:d.countryDist.map(r=>r.count),backgroundColor:'#a78bfa',borderRadius:4}]},
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartCustCountries', { type:'bar', data:{ labels:d.countryDist.map(r=>r.country), datasets:[{data:d.countryDist.map(r=>r.count),backgroundColor:'#1A7A9E',borderRadius:4}]},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
 
     renderCustTable();
   } catch (e) { document.getElementById('customers-loading').innerHTML = err(e); }
@@ -920,7 +926,7 @@ function renderCustTable() {
   document.getElementById('cust-body').innerHTML = _custsFiltered.map(c => `
     <tr>
       <td><span style="color:var(--muted)">${c.CustomerID}</span></td>
-      <td><span style="cursor:pointer;color:var(--blue)" onclick="openCustModal('${c.CustomerID}','${escQ(c.FirstName+' '+c.LastName)}')">${c.FirstName} ${c.LastName}</span></td>
+      <td><span style="cursor:pointer;color:var(--navy)" onclick="openCustModal('${c.CustomerID}','${escQ(c.FirstName+' '+c.LastName)}')">${c.FirstName} ${c.LastName}</span></td>
       <td>${c.Country || '—'}</td><td>${c.CustomerType || '—'}</td>
       <td>${c.loyalty ? '<span class="badge badge-teal">&#10003; Loyalty</span>' : '<span class="badge badge-grey">No</span>'}</td>
       <td>${c.orderCount}</td><td>$${fmt(c.lifetimeValue)}</td><td>${c.lastOrder}</td>
@@ -959,8 +965,8 @@ async function loadProducts() {
     const d = await api({ section: 'products' });
     _prodsData = d.products || []; _prodsFiltered = [..._prodsData];
     hide('products-loading'); show('products-content');
-    mkChart('chartCatRev', { type:'bar', data:{ labels:d.byCategory.map(r=>r.cat), datasets:[{data:d.byCategory.map(r=>r.rev),backgroundColor:'#ffd166',borderRadius:4}]},
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartCatRev', { type:'bar', data:{ labels:d.byCategory.map(r=>r.cat), datasets:[{data:d.byCategory.map(r=>r.rev),backgroundColor:'#D99A2A',borderRadius:4}]},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
     renderProdsTable();
   } catch (e) { document.getElementById('products-loading').innerHTML = err(e); }
 }
@@ -1054,29 +1060,29 @@ async function loadRentals() {
       <div class="kpi coral"><div class="kpi-label">Transactions</div><div class="kpi-value">${(+(d.totalTransactions||0)).toLocaleString()}</div></div>
       <div class="kpi gold"><div class="kpi-label">Return Rate</div><div class="kpi-value">${d.returnRate}%</div></div>
     `;
-    mkChart('chartRentalMonthly', { type:'line', data:{ labels:d.monthly.map(r=>r.month), datasets:[{label:'Revenue',data:d.monthly.map(r=>r.rev),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.15)',fill:true,tension:.35,pointRadius:0}]},
-      options:{...baseOpts(),scales:{x:{ticks:{maxTicksLimit:12,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartRentalMonthly', { type:'line', data:{ labels:d.monthly.map(r=>r.month), datasets:[{label:'Revenue',data:d.monthly.map(r=>r.rev),borderColor:'#1A7A9E',backgroundColor:'rgba(26,122,158,.15)',fill:true,tension:.35,pointRadius:0}]},
+      options:{...baseOpts(),scales:{x:{ticks:{maxTicksLimit:12,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
 
     if (d.byCategory && d.byCategory.length) {
       mkChart('chartRentalCat', { type:'bar', data:{ labels:d.byCategory.map(r=>r.cat), datasets:[
-          {label:'Revenue',data:d.byCategory.map(r=>r.revenue),backgroundColor:'#a78bfa',borderRadius:4,yAxisID:'y'},
-          {label:'Transactions',data:d.byCategory.map(r=>r.count),backgroundColor:'rgba(96,165,250,.3)',borderRadius:4,yAxisID:'y1'},
+          {label:'Revenue',data:d.byCategory.map(r=>r.revenue),backgroundColor:'#1A7A9E',borderRadius:4,yAxisID:'y'},
+          {label:'Transactions',data:d.byCategory.map(r=>r.count),backgroundColor:'rgba(0,180,160,.3)',borderRadius:4,yAxisID:'y1'},
         ]},
         options:{...baseOpts(),scales:{
-          x:{ticks:{color:'#8892b0'},grid:{display:false}},
-          y:{ticks:{callback:v=>'$'+fmt(v),color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'},position:'left'},
-          y1:{ticks:{color:'#60a5fa'},grid:{display:false},position:'right'},
+          x:{ticks:{color:'#6b7a8d'},grid:{display:false}},
+          y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'},position:'left'},
+          y1:{ticks:{color:'#6b7a8d'},grid:{display:false},position:'right'},
         }}
       });
     }
 
     if (d.monthly && d.monthly.length) {
-      mkChart('chartRentalPct', { type:'line', data:{ labels:d.monthly.map(r=>r.month), datasets:[{label:'Rental %',data:d.monthly.map(r=>r.pct),borderColor:'#ffd166',backgroundColor:'rgba(255,209,102,.1)',fill:true,tension:.35,pointRadius:0}]},
-        options:{...baseOpts(),scales:{x:{ticks:{maxTicksLimit:12,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}},y:{min:0,max:100,ticks:{callback:v=>v+'%',color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+      mkChart('chartRentalPct', { type:'line', data:{ labels:d.monthly.map(r=>r.month), datasets:[{label:'Rental %',data:d.monthly.map(r=>r.pct),borderColor:'#D99A2A',backgroundColor:'rgba(217,154,42,.1)',fill:true,tension:.35,pointRadius:0}]},
+        options:{...baseOpts(),scales:{x:{ticks:{maxTicksLimit:12,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}},y:{min:0,max:100,ticks:{callback:v=>v+'%',color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
     }
 
-    mkChart('chartTopRentals', { type:'bar', data:{ labels:d.topRentals.map(r=>r.sku), datasets:[{data:d.topRentals.map(r=>r.revenue),backgroundColor:'#a78bfa',borderRadius:4}]},
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}});
+    mkChart('chartTopRentals', { type:'bar', data:{ labels:d.topRentals.map(r=>r.sku), datasets:[{data:d.topRentals.map(r=>r.revenue),backgroundColor:'#1A7A9E',borderRadius:4}]},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
   } catch (e) { document.getElementById('rentals-loading').innerHTML = err(e); }
 }
 
@@ -1090,25 +1096,25 @@ async function loadPromos() {
 
     mkChart('chartPromoEffect', { type:'bar', data:{
         labels:['With Promo','Without Promo'],
-        datasets:[{data:[+ef.ordersWithPromo,+ef.ordersNoPromo],backgroundColor:['#ff6b6b','#2e3250'],borderRadius:4,label:'Orders'}]
+        datasets:[{data:[+ef.ordersWithPromo,+ef.ordersNoPromo],backgroundColor:['#E8622A','#e2d9cc'],borderRadius:4,label:'Orders'}]
       },
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false},
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false},
         tooltip:{callbacks:{afterBody:c=>['Revenue: $'+fmt(c[0].dataIndex===0?ef.revenueWithPromo:ef.revenueNoPromo)]}}}}
     });
 
     mkChart('chartPromoAOV', { type:'bar', data:{
         labels:['With Promo','Without Promo'],
-        datasets:[{data:[+ef.avgWithPromo,+ef.avgNoPromo],backgroundColor:['#ff6b6b','#60a5fa'],borderRadius:4,label:'Avg Order Value'}]
+        datasets:[{data:[+ef.avgWithPromo,+ef.avgNoPromo],backgroundColor:['#E8622A','#00B4A0'],borderRadius:4,label:'Avg Order Value'}]
       },
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{callback:v=>'$'+v,color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}
     });
 
     const top20 = (d.promos || []).slice(0, 20);
     mkChart('chartPromos', { type:'bar', data:{
         labels:top20.map(p=>p.PromoCode),
-        datasets:[{data:top20.map(p=>p.orderCount),backgroundColor:'#ff6b6b',borderRadius:4}]
+        datasets:[{data:top20.map(p=>p.orderCount),backgroundColor:'#E8622A',borderRadius:4}]
       },
-      options:{...baseOpts(),scales:{x:{ticks:{color:'#8892b0'},grid:{display:false}},y:{ticks:{color:'#8892b0'},grid:{color:'rgba(255,255,255,.04)'}}},plugins:{legend:{display:false}}}
+      options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}
     });
 
     document.getElementById('promos-body').innerHTML = (d.promos||[]).map(p => `

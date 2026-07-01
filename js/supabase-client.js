@@ -20,18 +20,26 @@ async function fetchProductsFromSupabase() {
   const catalogSkus = new Set(PRODUCTS.map(p => p.sku));
   const catalog = data.filter(row => catalogSkus.has(row.sku));
 
-  // Normalize the Supabase row shape to match the existing PRODUCTS array
-  // so the rest of the site needs no changes
-  return catalog.map(row => ({
-    sku:          row.sku,
-    name:         row.name,
-    category:     row.category,
-    subcategory:  row.subcategory,
-    price:        parseFloat(row.price),
-    availability: row.availability,
-    colors:       row.colors  || [],
-    sizes:        row.sizes   || [],
-    variants:     row.variants || [],
-    rentalRate:   null, // online store is sale-only
-  }));
+  // Build a lookup of the bundled catalog so we can pull colors/sizes/variants
+  // from it — those fields were never stored in Supabase, only price/availability
+  // are managed there. Everything else (hover images, color swatches, size opts)
+  // comes from the bundled data unchanged.
+  const bundledMap = {};
+  for (const p of PRODUCTS) bundledMap[p.sku] = p;
+
+  return catalog.map(row => {
+    const b = bundledMap[row.sku] || {};
+    return {
+      sku:          row.sku,
+      name:         row.name,
+      category:     row.category,
+      subcategory:  row.subcategory,
+      price:        parseFloat(row.price),
+      availability: row.availability,
+      colors:       b.colors   || [],
+      sizes:        b.sizes    || [],
+      variants:     b.variants || [],
+      rentalRate:   null,
+    };
+  });
 }
