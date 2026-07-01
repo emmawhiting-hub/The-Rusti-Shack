@@ -14,9 +14,15 @@ async function fetchProductsFromSupabase() {
 
   if (error) throw error;
 
+  // Only show SKUs that exist in the bundled catalog.
+  // The DB also contains variant SKUs (APP-003-M-NAV) and historical SKUs
+  // (Beach Ball, Shovel etc.) imported purely for FK constraints on order lines.
+  const catalogSkus = new Set(PRODUCTS.map(p => p.sku));
+  const catalog = data.filter(row => catalogSkus.has(row.sku));
+
   // Normalize the Supabase row shape to match the existing PRODUCTS array
   // so the rest of the site needs no changes
-  return data.map(row => ({
+  return catalog.map(row => ({
     sku:          row.sku,
     name:         row.name,
     category:     row.category,
