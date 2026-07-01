@@ -173,14 +173,7 @@
   <div class="topbar">
     <div class="topbar-logo">Rusti <span>Shack</span> &mdash; Manager</div>
     <div class="topbar-spacer"></div>
-    <div class="date-filter">
-      <button class="date-btn" data-year="2021">2021</button>
-      <button class="date-btn" data-year="2022">2022</button>
-      <button class="date-btn" data-year="2023">2023</button>
-      <button class="date-btn" data-year="2024">2024</button>
-      <button class="date-btn" data-year="2025">2025</button>
-      <button class="date-btn active" data-year="0">All</button>
-    </div>
+    <div class="date-filter" id="year-filter"></div>
   </div>
 
   <div class="sidebar">
@@ -529,6 +522,25 @@ function showApp() {
 }
 
 // ── Date range ─────────────────────────────────────────────────────
+
+// Build year filter buttons dynamically so the current year is always included
+(function buildYearButtons() {
+  const currentYear = new Date().getFullYear();
+  const startYear   = 2021;
+  const container   = document.getElementById('year-filter');
+  for (let y = startYear; y <= currentYear; y++) {
+    const btn = document.createElement('button');
+    btn.className   = 'date-btn';
+    btn.dataset.year = y;
+    btn.textContent  = y;
+    container.appendChild(btn);
+  }
+  const allBtn = document.createElement('button');
+  allBtn.className   = 'date-btn active';
+  allBtn.dataset.year = '0';
+  allBtn.textContent  = 'All';
+  container.appendChild(allBtn);
+})();
 
 document.querySelectorAll('.date-btn').forEach(btn => btn.addEventListener('click', function () {
   document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
