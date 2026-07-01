@@ -468,7 +468,7 @@
             <th onclick="sortTable('promo',4,'str')">Channel <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('promo',5,'num')">Orders <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('promo',6,'num')">Revenue <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('promo',7,'num')">Rev. Sacrificed <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',7,'num')">Net Gain <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('promo',8,'num')">Avg Order <span class="sa">&#8645;</span></th>
           </tr></thead>
           <tbody id="promos-body"></tbody></table>
@@ -1206,7 +1206,9 @@ async function loadPromos() {
 
 function renderPromosTable() {
   document.getElementById('promos-body').innerHTML = _promosData.map(p => {
-    const roi = p.sacrificed > 0 ? (p.revenue / p.sacrificed).toFixed(1) : '—';
+    const net = p.revenue - p.sacrificed;
+    const sacrificedPct = p.revenue > 0 ? (p.sacrificed / p.revenue * 100).toFixed(1) : 0;
+    const netColor = net >= 0 ? 'var(--teal)' : 'var(--coral)';
     return `<tr>
       <td><span style="color:var(--teal);font-family:monospace">${p.PromoCode}</span></td>
       <td>${p.PromoName||'—'}</td><td>${p.PromoType||'—'}</td>
@@ -1215,8 +1217,8 @@ function renderPromosTable() {
       <td>${p.Channel||'All'}</td>
       <td><strong>${p.orderCount}</strong></td>
       <td>$${fmt(p.revenue)}</td>
-      <td style="color:var(--coral)">$${fmt(p.sacrificed)}</td>
-      <td>$${fmt(p.avgOrder)} <span style="font-size:11px;color:${roi!=='—'&&+roi>=3?'var(--teal)':'var(--muted)'}"> ${roi!=='—'?'('+roi+'x ROI)':''}</span></td>
+      <td style="color:${netColor};font-weight:600">$${fmt(net)}<span style="font-size:11px;font-weight:400;color:var(--muted)"> (−${sacrificedPct}% disc.)</span></td>
+      <td>$${fmt(p.avgOrder)}</td>
     </tr>`;
   }).join('');
 }
@@ -1289,7 +1291,7 @@ function sortTable(key, col, type) {
     if (key==='cust')   return [item.CustomerID,item.FirstName+' '+item.LastName,item.Country,item.CustomerType,item.loyalty?'Yes':'No',item.orderCount,parseFloat(item.lifetimeValue),item.lastOrder][col];
     if (key==='prod')   return [item.sku,item.name,item.category,item.units,item.revenue,item.margin][col];
     if (key==='inv')    return [item.sku,item.name,item.category,item.stockQty??-1,item.reorderLevel??-1,item.status][col];
-    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.sacrificed),parseFloat(item.avgOrder)][col];
+    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.revenue)-parseFloat(item.sacrificed),parseFloat(item.avgOrder)][col];
     return '';
   }
   const cmp = (a,b) => {
