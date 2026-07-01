@@ -50,7 +50,18 @@
   .nav-item.active .icon{color:var(--teal)}
   .nav-section{padding:12px 20px 4px;font-size:10px;color:var(--muted2);letter-spacing:.08em;text-transform:uppercase}
 
+  /* Restock banner */
+  .restock-banner{display:none;position:fixed;top:var(--topbar);left:var(--sidebar);right:0;z-index:80;background:#fff3e0;border-bottom:2px solid var(--orange);padding:10px 24px;font-size:13px;display:flex;align-items:center;gap:10px}
+  .restock-banner.visible{display:flex}
+  .restock-banner .rb-icon{font-size:16px}
+  .restock-banner .rb-msg{flex:1;color:var(--text)}
+  .restock-banner .rb-msg strong{color:var(--orange)}
+  .restock-banner .rb-link{color:var(--navy);text-decoration:underline;cursor:pointer;font-weight:600;white-space:nowrap}
+  .restock-banner .rb-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px;line-height:1}
+  .restock-banner .rb-close:hover{color:var(--text)}
+
   .main{margin-top:var(--topbar);margin-left:var(--sidebar);padding:28px 32px;overflow-y:auto;height:calc(100vh - var(--topbar))}
+  .main.banner-visible{padding-top:60px}
   .section{display:none}
   .section.active{display:block}
   .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
@@ -170,6 +181,12 @@
 </div>
 
 <div id="app">
+  <div class="restock-banner" id="restock-banner">
+    <span class="rb-icon">&#9888;</span>
+    <span class="rb-msg" id="restock-msg"></span>
+    <span class="rb-link" onclick="goToInventory()">View Inventory</span>
+    <button class="rb-close" onclick="dismissBanner()" title="Dismiss">&#x2715;</button>
+  </div>
   <div class="topbar">
     <div class="topbar-logo">Rusti <span>Shack</span> &mdash; Manager</div>
     <div class="topbar-spacer"></div>
@@ -358,7 +375,10 @@
 
     <!-- Inventory -->
     <div class="section" id="sec-inventory">
-      <div class="section-header"><div class="section-title">Inventory</div></div>
+      <div class="section-header">
+        <div class="section-title">Inventory</div>
+        <button class="btn-sm" id="autofill-btn" onclick="autoFillInventory()">&#9654; Auto-fill from 2025 Sales</button>
+      </div>
       <div id="inventory-loading" class="spinner"></div>
       <div id="inventory-content" style="display:none">
         <div class="kpi-grid" id="inv-kpis"></div>
@@ -519,6 +539,7 @@ function showApp() {
   document.getElementById('app').style.display = 'block';
   initNav();
   loadSection('dashboard');
+  loadInventoryAlerts();
 }
 
 // ── Date range ─────────────────────────────────────────────────────
@@ -1195,6 +1216,56 @@ function exportCSV(section) {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+// ── Restock banner ──────────────────────────────────────────
+let _bannerDismissed = false;
+
+async function loadInventoryAlerts() {
+  try {
+    const d = await api({ section: 'inventory_alerts' });
+    const total = (d.stockouts || 0) + (d.low || 0);
+    if (total === 0 || _bannerDismissed) return;
+    const parts = [];
+    if (d.stockouts) parts.push(`<strong>${d.stockouts} product${d.stockouts > 1 ? 's' : ''} out of stock</strong>`);
+    if (d.low)       parts.push(`<strong>${d.low} product${d.low > 1 ? 's' : ''} running low</strong>`);
+    document.getElementById('restock-msg').innerHTML = parts.join(' &bull; ') + ' — reorder soon.';
+    document.getElementById('restock-banner').classList.add('visible');
+    document.querySelector('.main').classList.add('banner-visible');
+  } catch {}
+}
+
+function dismissBanner() {
+  _bannerDismissed = true;
+  document.getElementById('restock-banner').classList.remove('visible');
+  document.querySelector('.main').classList.remove('banner-visible');
+}
+
+function goToInventory() {
+  dismissBanner();
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector('[data-section="inventory"]').classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-inventory').classList.add('active');
+  _activeSection = 'inventory';
+  if (!_loaded['inventory']) loadSection('inventory');
+}
+
+async function autoFillInventory() {
+  const btn = document.getElementById('autofill-btn');
+  btn.textContent = 'Calculating…';
+  btn.disabled = true;
+  try {
+    const d = await apiPost('auto_inventory', {});
+    btn.textContent = '&#10003; Done — ' + d.updated + ' products updated';
+    _loaded['inventory'] = false;
+    loadInventory();
+    _bannerDismissed = false;
+    loadInventoryAlerts();
+  } catch (e) {
+    btn.textContent = 'Error: ' + e.message;
+  }
+  setTimeout(() => { btn.textContent = '&#9654; Auto-fill from 2025 Sales'; btn.disabled = false; }, 3000);
+}
+
 function fmt(v) {
   const n=parseFloat(v||0); if(isNaN(n)) return '0';
   if(n>=1e6) return (n/1e6).toFixed(1)+'M';

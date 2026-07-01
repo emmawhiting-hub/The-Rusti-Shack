@@ -29,7 +29,7 @@ async function handler(req, res) {
   const sb = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
 
   try {
-    // ── POST: update inventory ────────────────────────────────
+    // ── POST: update inventory (single row) ──────────────────
     if (req.method === 'POST' && section === 'update_inventory') {
       const { sku, stock_qty, reorder_level } = req.body || {};
       if (!sku) return res.status(400).json({ error: 'sku required' });
@@ -41,6 +41,49 @@ async function handler(req, res) {
       }, { onConflict: 'SKU' });
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true });
+    }
+
+    // ── POST: auto-populate inventory from 2025 sales ────────
+    if (req.method === 'POST' && section === 'auto_inventory') {
+      const [linesRes, prodsRes] = await Promise.all([
+        sb.from('OrderLines').select('ProductCode,Quantity')
+          .gte('OrderDate', '2025-01-01').lte('OrderDate', '2025-12-31').limit(100000),
+        sb.from('products').select('sku').limit(5000),
+      ]);
+      const unitsBySku = {};
+      for (const l of (linesRes.data || []))
+        unitsBySku[l.ProductCode] = (unitsBySku[l.ProductCode] || 0) + (l.Quantity || 0);
+
+      const upserts = [];
+      // Products with 2025 sales
+      for (const [sku, units] of Object.entries(unitsBySku)) {
+        upserts.push({
+          SKU:          sku,
+          StockQty:     Math.max(5, Math.round(units / 12)), // ~1 month supply
+          ReorderLevel: Math.max(1, Math.round(units * 0.02)),
+          LastUpdated:  new Date().toISOString(),
+        });
+      }
+      // Catalog products with no 2025 sales get minimal defaults
+      const soldSkus = new Set(Object.keys(unitsBySku));
+      for (const p of (prodsRes.data || [])) {
+        if (!soldSkus.has(p.sku)) {
+          upserts.push({ SKU: p.sku, StockQty: 5, ReorderLevel: 1, LastUpdated: new Date().toISOString() });
+        }
+      }
+      const { error } = await sb.from('Inventory').upsert(upserts, { onConflict: 'SKU' });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ ok: true, updated: upserts.length });
+    }
+
+    // ── GET: lightweight alert counts for notification banner ─
+    if (section === 'inventory_alerts') {
+      const { data: inv } = await sb.from('Inventory').select('SKU,StockQty,ReorderLevel').limit(5000);
+      const rows = inv || [];
+      return res.json({
+        stockouts: rows.filter(i => i.StockQty === 0).length,
+        low:       rows.filter(i => i.StockQty > 0 && i.StockQty <= i.ReorderLevel).length,
+      });
     }
 
     // ── Order detail ──────────────────────────────────────────
