@@ -70,17 +70,17 @@ async function handler(req, res) {
 
       const [ordersRes, linesRes, custsRes, rentalsRes, prevOrdersRes, yoyOrdersRes] = await Promise.all([
         sb.from('Orders').select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo),
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
         sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo),
-        sb.from('Customers_Core').select('CustomerID,Country,JoinDate'),
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(100000),
+        sb.from('Customers_Core').select('CustomerID,Country,JoinDate').limit(50000),
         sb.from('RentalTransactions').select('RentalDate,RentalRevenue')
-          .gte('RentalDate', dateFrom).lte('RentalDate', dateTo),
+          .gte('RentalDate', dateFrom).lte('RentalDate', dateTo).limit(50000),
         sb.from('Orders').select('OrderTotal')
-          .gte('OrderDate', prevFrom).lt('OrderDate', dateFrom),
+          .gte('OrderDate', prevFrom).lt('OrderDate', dateFrom).limit(50000),
         sb.from('Orders').select('OrderDate,OrderTotal')
           .gte('OrderDate', `${lastYear}-01-01`)
-          .lte('OrderDate', `${currentYear}-12-31`),
+          .lte('OrderDate', `${currentYear}-12-31`).limit(50000),
       ]);
 
       const allOrders  = ordersRes.data  || [];
@@ -226,9 +226,9 @@ async function handler(req, res) {
     // ── Customers ────────────────────────────────────────────
     if (section === 'customers') {
       const [coreRes, contactRes, ordersRes] = await Promise.all([
-        sb.from('Customers_Core').select('*').order('JoinDate', { ascending: false }),
-        sb.from('Customers_Contact').select('*'),
-        sb.from('Orders').select('CustID,OrderTotal,OrderDate'),
+        sb.from('Customers_Core').select('*').order('JoinDate', { ascending: false }).limit(50000),
+        sb.from('Customers_Contact').select('*').limit(50000),
+        sb.from('Orders').select('CustID,OrderTotal,OrderDate').limit(50000),
       ]);
 
       const contactMap = {};
@@ -310,8 +310,8 @@ async function handler(req, res) {
     if (section === 'products') {
       const [linesRes, productsRes] = await Promise.all([
         sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue,LineCost')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo),
-        sb.from('products').select('sku,name,category,subcategory,price'),
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(100000),
+        sb.from('products').select('sku,name,category,subcategory,price').limit(5000),
       ]);
 
       const meta = {};
@@ -349,10 +349,10 @@ async function handler(req, res) {
         sb.from('RentalTransactions')
           .select('RentalID,RentalDate,CustID,SKU,Quantity,DailyRate,RentalRevenue,Returned')
           .gte('RentalDate', dateFrom).lte('RentalDate', dateTo)
-          .order('RentalDate', { ascending: false }),
+          .order('RentalDate', { ascending: false }).limit(50000),
         sb.from('Orders').select('OrderDate,OrderTotal')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo),
-        sb.from('products').select('sku,category'),
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
+        sb.from('products').select('sku,category').limit(5000),
       ]);
 
       const allRentals = rentalsRes.data  || [];
@@ -418,9 +418,9 @@ async function handler(req, res) {
     // ── Promos ───────────────────────────────────────────────
     if (section === 'promos') {
       const [promosRes, opRes, allOrdersRes] = await Promise.all([
-        sb.from('Promotions').select('*').order('StartDate', { ascending: false }),
-        sb.from('OrderPromotions').select('PromoCode,OrderID'),
-        sb.from('Orders').select('OrderID,OrderTotal'),
+        sb.from('Promotions').select('*').order('StartDate', { ascending: false }).limit(1000),
+        sb.from('OrderPromotions').select('PromoCode,OrderID').limit(100000),
+        sb.from('Orders').select('OrderID,OrderTotal').limit(50000),
       ]);
 
       const opData     = opRes.data || [];
