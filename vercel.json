@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/manager", "destination": "/manager.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
