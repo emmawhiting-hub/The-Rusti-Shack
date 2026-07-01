@@ -174,11 +174,12 @@
     <div class="topbar-logo">Rusti <span>Shack</span> &mdash; Manager</div>
     <div class="topbar-spacer"></div>
     <div class="date-filter">
-      <button class="date-btn" data-days="7">7D</button>
-      <button class="date-btn" data-days="30">30D</button>
-      <button class="date-btn" data-days="90">90D</button>
-      <button class="date-btn" data-days="365">1Y</button>
-      <button class="date-btn active" data-days="0">All</button>
+      <button class="date-btn" data-year="2021">2021</button>
+      <button class="date-btn" data-year="2022">2022</button>
+      <button class="date-btn" data-year="2023">2023</button>
+      <button class="date-btn" data-year="2024">2024</button>
+      <button class="date-btn" data-year="2025">2025</button>
+      <button class="date-btn active" data-year="0">All</button>
     </div>
   </div>
 
@@ -530,9 +531,14 @@ let _loaded   = {};
 document.querySelectorAll('.date-btn').forEach(btn => btn.addEventListener('click', function () {
   document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
   this.classList.add('active');
-  const days = +this.dataset.days;
-  _dateTo   = new Date().toISOString().slice(0, 10);
-  _dateFrom = days === 0 ? '2021-01-01' : new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+  const year = +this.dataset.year;
+  if (year === 0) {
+    _dateFrom = '2021-01-01';
+    _dateTo   = new Date().toISOString().slice(0, 10);
+  } else {
+    _dateFrom = year + '-01-01';
+    _dateTo   = year + '-12-31';
+  }
   _loaded = {};
   destroyAllCharts();
   loadSection(_activeSection);
@@ -700,7 +706,7 @@ function renderChannelChart(d) {
   mkChart('chartChannel', {
     type: 'doughnut', data: {
       labels: ['In-Store', 'Shipping', 'Rentals'],
-      datasets: [{ data: [+d.instoreRevenue, +d.shippingRevenue, +d.rentalRevenue], backgroundColor: ['#00B4A0', '#00B4A0', '#1A7A9E'], borderWidth: 0 }]
+      datasets: [{ data: [+d.instoreRevenue, +d.shippingRevenue, +d.rentalRevenue], backgroundColor: ['#00B4A0', '#1A7A9E', '#E8622A'], borderWidth: 0 }]
     },
     options: { ...baseOpts(), cutout: '65%', plugins: {
       legend: { position: 'right', labels: { color: '#8892b0', boxWidth: 12 } },
