@@ -465,25 +465,25 @@ async function handler(req, res) {
 
     // ── Promos ───────────────────────────────────────────────
     if (section === 'promos') {
-      const [promosRes, opRes, allOrdersRes] = await Promise.all([
+      const [promosRes, opRes] = await Promise.all([
         sb.from('Promotions').select('*').order('StartDate', { ascending: false }).limit(1000),
         sb.from('OrderPromotions').select('PromoCode,OrderID').limit(100000),
-        sb.from('Orders').select('OrderID,OrderTotal').limit(50000),
       ]);
 
-      const opData     = opRes.data || [];
-      const orderData  = allOrdersRes.data || [];
+      const opData = opRes.data || [];
 
-      // Map orderID → total
+      // Fetch only the specific orders that appear in OrderPromotions
+      const promoOrderSet = new Set(opData.map(op => op.OrderID));
+      const promoOrderIds = [...promoOrderSet];
+      // Fetch promo orders by exact IDs + all orders for effectiveness comparison
+      const [promoOrdersRes, allOrdersRes, linesRes] = await (promoOrderIds.length ? Promise.all([
+        sb.from('Orders').select('OrderID,OrderTotal').in('OrderID', promoOrderIds).limit(50000),
+        sb.from('Orders').select('OrderID,OrderTotal').limit(50000),
+        sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue').in('OrderID', promoOrderIds).limit(200000),
+      ]) : Promise.all([{ data:[] }, { data:[] }, { data:[] }]));
+
       const orderTotals = {};
-      for (const o of orderData) orderTotals[o.OrderID] = parseFloat(o.OrderTotal||0);
-
-      // Set of orderIDs that used any promo — fetch their lines for discount calc
-      const promoOrderSet  = new Set(opData.map(op=>op.OrderID));
-      const promoOrderIds  = [...promoOrderSet];
-      const linesRes = promoOrderIds.length
-        ? await sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue').in('OrderID', promoOrderIds).limit(200000)
-        : { data: [] };
+      for (const o of (promoOrdersRes.data||[])) orderTotals[o.OrderID] = parseFloat(o.OrderTotal||0);
 
       // Sacrificed revenue per order = sum(UnitPrice*Qty - LineRevenue) for its lines
       const sacrificedByOrder = {};
@@ -493,8 +493,8 @@ async function handler(req, res) {
         sacrificedByOrder[l.OrderID] = (sacrificedByOrder[l.OrderID]||0) + Math.max(0, full - paid);
       }
 
-      const orderCounts    = {};
-      const promoRevenue   = {};
+      const orderCounts     = {};
+      const promoRevenue    = {};
       const promoSacrificed = {};
       for (const op of opData) {
         orderCounts[op.PromoCode]     = (orderCounts[op.PromoCode]||0) + 1;
@@ -503,6 +503,7 @@ async function handler(req, res) {
       }
 
       // Overall effectiveness
+      const orderData = allOrdersRes.data || [];
       let revenueWithPromo = 0, revenueNoPromo = 0, ordersWithPromo = 0, ordersNoPromo = 0;
       for (const o of orderData) {
         if (promoOrderSet.has(o.OrderID)) { revenueWithPromo += parseFloat(o.OrderTotal||0); ordersWithPromo++; }
