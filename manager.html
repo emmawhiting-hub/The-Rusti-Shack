@@ -494,6 +494,11 @@
 </div>
 
 <script>
+// ── State (must be declared before any auto-login call) ────────────
+let _dateFrom = '2021-01-01';
+let _dateTo   = new Date().toISOString().slice(0, 10);
+let _loaded   = {};
+
 // ── Auth ──────────────────────────────────────────────────────────
 let _token = sessionStorage.getItem('mgr_token') || '';
 if (_token) showApp();
@@ -524,9 +529,6 @@ function showApp() {
 }
 
 // ── Date range ─────────────────────────────────────────────────────
-let _dateFrom = '2021-01-01';
-let _dateTo   = new Date().toISOString().slice(0, 10);
-let _loaded   = {};
 
 document.querySelectorAll('.date-btn').forEach(btn => btn.addEventListener('click', function () {
   document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
