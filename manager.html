@@ -212,9 +212,23 @@
 
     <!-- Dashboard -->
     <div class="section active" id="sec-dashboard">
-      <div class="section-header"><div class="section-title">Dashboard</div></div>
+      <div class="section-header">
+        <div class="section-title">Dashboard</div>
+        <div style="display:flex;gap:8px;position:relative">
+          <button class="btn-sm" onclick="exportSalesCSV()">&#8595; Download Sales (CSV)</button>
+          <button class="btn-sm" onclick="toggleFullExportMenu()">&#8595; Full Data Export &#9662;</button>
+          <div id="full-export-menu" style="display:none;position:absolute;top:32px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:6px;z-index:50;min-width:170px">
+            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('orders','Orders.csv')">Orders</div>
+            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('orderlines','OrderLines.csv')">OrderLines</div>
+            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('customers_core','Customers_Core.csv')">Customers_Core</div>
+            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('customers_contact','Customers_Contact.csv')">Customers_Contact</div>
+          </div>
+        </div>
+      </div>
       <div id="dash-loading" class="spinner"></div>
       <div id="dash-content" style="display:none">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Last 7 Days</div>
+        <div class="kpi-grid" id="week-kpis" style="margin-bottom:24px"></div>
         <div class="kpi-grid" id="dash-kpis"></div>
         <div class="target-bar-wrap" id="target-bar-wrap">
           <div class="target-bar-header">
@@ -258,7 +272,7 @@
         </div>
         <div class="table-card">
           <div class="table-toolbar"><h3>Recent Orders</h3></div>
-          <table><thead><tr><th>Order ID</th><th>Date</th><th>Customer</th><th>Channel</th><th>Total</th></tr></thead>
+          <table><thead><tr><th>Order ID</th><th>Date</th><th>Customer</th><th>Country</th><th>Channel</th><th>Total</th></tr></thead>
           <tbody id="recent-orders-body"></tbody></table>
         </div>
       </div>
@@ -579,6 +593,7 @@ function showApp() {
   initNav();
   loadSection('dashboard');
   loadInventoryAlerts();
+  loadWeekSummary();
 }
 
 // ── Date range ─────────────────────────────────────────────────────
@@ -694,6 +709,64 @@ async function loadDashboard() {
     renderDashboard(_dashData);
   } catch (e) { document.getElementById('dash-loading').innerHTML = err(e); }
 }
+
+async function loadWeekSummary() {
+  try {
+    const d = await api({ section: 'week_summary' });
+    document.getElementById('week-kpis').innerHTML = `
+      <div class="kpi"><div class="kpi-label">Orders (7d)</div><div class="kpi-value">${(+d.totalOrders).toLocaleString()}</div></div>
+      <div class="kpi coral"><div class="kpi-label">Revenue (7d)</div><div class="kpi-value">$${fmt(d.totalRevenue)}</div></div>
+      <div class="kpi blue"><div class="kpi-label">Top Seller (7d)</div><div class="kpi-value" style="font-size:16px">${d.topSeller}</div><div class="kpi-sub">${d.topSellerUnits} units sold</div></div>
+    `;
+  } catch (e) { /* non-critical */ }
+}
+
+// ── CSV downloads: sales export + full data export ────────────────
+function toCSVAndDownload(header, dataRows, filename) {
+  const rows = [header, ...dataRows];
+  const csv = rows.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = filename;
+  a.click();
+}
+
+async function exportSalesCSV() {
+  try {
+    const d = await api({ section: 'export_sales' });
+    const header = ['OrderID','OrderDate','FirstName','LastName','Country','ProductCode','ProductName','Quantity','UnitPrice','LineRevenue','ShippingFee','OrderTotal','PaymentMethod'];
+    const rows = (d.rows || []).map(r => header.map(h => r[h]));
+    toCSVAndDownload(header, rows, 'rusti-shack-sales.csv');
+  } catch (e) { alert('Export failed: ' + e.message); }
+}
+
+const RAW_TABLE_COLUMNS = {
+  orders:            ['OrderID','OrderDate','CustID','LocationID','SalesAssociate','Channel','ShippingFee','OrderTotal','PaymentMethod'],
+  orderlines:        ['OrderID','LineNumber','ProductCode','Quantity','UnitPrice','DiscountPct','LineRevenue','LineCost','EffectiveDiscountAmount'],
+  customers_core:    ['CustomerID','FirstName','LastName','CustomerType','JoinDate','City','Country'],
+  customers_contact: ['CustomerID','Email','Phone','LoyaltyMember','StreetAddress','Region','PostalCode'],
+};
+
+async function exportRawTable(table, filename) {
+  try {
+    const d = await api({ section: 'export_raw', table });
+    const header = RAW_TABLE_COLUMNS[table];
+    const rows = (d.rows || []).map(r => header.map(h => r[h]));
+    toCSVAndDownload(header, rows, filename);
+  } catch (e) { alert('Export failed: ' + e.message); }
+  document.getElementById('full-export-menu').style.display = 'none';
+}
+
+function toggleFullExportMenu() {
+  const el = document.getElementById('full-export-menu');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', function (e) {
+  const menu = document.getElementById('full-export-menu');
+  if (menu && menu.style.display === 'block' && !menu.contains(e.target) && e.target.textContent.indexOf('Full Data Export') === -1) {
+    menu.style.display = 'none';
+  }
+});
 
 function pct(cur, prev) {
   if (!+prev) return '';
@@ -827,7 +900,7 @@ function renderAOVChart(d) {
 function renderRecentOrders(orders) {
   document.getElementById('recent-orders-body').innerHTML = orders.map(o => `
     <tr><td><span style="color:var(--teal)">${o.OrderID}</span></td><td>${o.OrderDate}</td>
-    <td>${o.customerDisplay}</td><td>${chBadge(o.Channel)}</td><td>$${fmt(o.OrderTotal)}</td></tr>
+    <td>${o.customerDisplay}</td><td>${o.country}</td><td>${chBadge(o.Channel)}</td><td>$${fmt(o.OrderTotal)}</td></tr>
   `).join('');
 }
 

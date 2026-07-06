@@ -16,6 +16,21 @@ function daysAgo(n) {
   return new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 }
 
+// Supabase/PostgREST silently caps any single request at 1000 rows regardless
+// of .limit(); page through with .range() to get the true full result set.
+async function fetchAll(buildQuery) {
+  const pageSize = 1000;
+  let all = [], from = 0;
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    all = all.concat(data || []);
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 async function handler(req, res) {
   const token = req.headers['x-manager-token'] || '';
   if (!validToken(token)) return res.status(401).json({ error: 'Unauthorized' });
@@ -86,6 +101,96 @@ async function handler(req, res) {
       });
     }
 
+    // ── Last 7 days summary (always trailing 7 days, ignores filter) ─
+    if (section === 'week_summary') {
+      const to   = new Date().toISOString().slice(0, 10);
+      const from = daysAgo(6);
+      const orders = await fetchAll(() => sb.from('Orders')
+        .select('OrderID,OrderTotal').gte('OrderDate', from).lte('OrderDate', to));
+      const orderIds = orders.map(o => o.OrderID);
+      const lines = orderIds.length
+        ? await fetchAll(() => sb.from('OrderLines').select('ProductCode,Quantity').in('OrderID', orderIds))
+        : [];
+
+      const unitsBySku = {};
+      for (const l of lines) unitsBySku[l.ProductCode] = (unitsBySku[l.ProductCode] || 0) + l.Quantity;
+      const top = Object.entries(unitsBySku).sort((a, b) => b[1] - a[1])[0];
+
+      let topName = top ? top[0] : '—';
+      if (top) {
+        const { data: prod } = await sb.from('products').select('name').eq('sku', top[0]).maybeSingle();
+        if (prod?.name) topName = prod.name;
+      }
+
+      return res.json({
+        from, to,
+        totalOrders:    orders.length,
+        totalRevenue:   orders.reduce((s, o) => s + parseFloat(o.OrderTotal || 0), 0).toFixed(2),
+        topSeller:      topName,
+        topSellerUnits: top ? top[1] : 0,
+      });
+    }
+
+    // ── Full sales export: one row per item sold ──────────────
+    if (section === 'export_sales') {
+      // Fetch all orders in range + the entire OrderLines table and join in
+      // memory — with 15k+ orders, filtering lines via .in(orderIds) would
+      // build an unworkably long query string, so a full-table pull + JS
+      // filter is the safer path here.
+      const [orders, allLines, custs, prods] = await Promise.all([
+        fetchAll(() => sb.from('Orders')
+          .select('OrderID,OrderDate,CustID,ShippingFee,OrderTotal,PaymentMethod')
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
+        fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity,UnitPrice,LineRevenue')),
+        fetchAll(() => sb.from('Customers_Core').select('CustomerID,FirstName,LastName,Country')),
+        fetchAll(() => sb.from('products').select('sku,name')),
+      ]);
+
+      const ordersById = {};
+      for (const o of orders) ordersById[o.OrderID] = o;
+      const custsById = {};
+      for (const c of custs) custsById[c.CustomerID] = c;
+      const namesBySku = {};
+      for (const p of prods) namesBySku[p.sku] = p.name;
+
+      const rows = allLines.filter(l => ordersById[l.OrderID]).map(l => {
+        const o = ordersById[l.OrderID];
+        const c = custsById[o.CustID] || {};
+        return {
+          OrderID:       l.OrderID,
+          OrderDate:     o.OrderDate || '',
+          FirstName:     c.FirstName || '',
+          LastName:      c.LastName || '',
+          Country:       c.Country || '',
+          ProductCode:   l.ProductCode,
+          ProductName:   namesBySku[l.ProductCode] || l.ProductCode,
+          Quantity:      l.Quantity,
+          UnitPrice:     parseFloat(l.UnitPrice || 0),
+          LineRevenue:   parseFloat(l.LineRevenue || 0),
+          ShippingFee:   parseFloat(o.ShippingFee || 0),
+          OrderTotal:    parseFloat(o.OrderTotal || 0),
+          PaymentMethod: o.PaymentMethod || '',
+        };
+      }).sort((a, b) => a.OrderDate < b.OrderDate ? 1 : a.OrderDate > b.OrderDate ? -1 : 0);
+
+      return res.json({ rows });
+    }
+
+    // ── Raw table exports (extra credit: full data pull) ──────
+    if (section === 'export_raw') {
+      const tableMap = {
+        orders:            'Orders',
+        orderlines:        'OrderLines',
+        customers_core:    'Customers_Core',
+        customers_contact: 'Customers_Contact',
+      };
+      const tableName = tableMap[req.query.table || ''];
+      if (!tableName) return res.status(400).json({ error: 'Unknown table' });
+
+      const rows = await fetchAll(() => sb.from(tableName).select('*'));
+      return res.json({ rows });
+    }
+
     // ── Order detail ──────────────────────────────────────────
     if (section === 'order_detail') {
       const { data: lines } = await sb.from('OrderLines')
@@ -111,31 +216,28 @@ async function handler(req, res) {
       const currentYear = new Date().getFullYear();
       const lastYear    = currentYear - 1;
 
-      const [ordersRes, custsRes, rentalsRes, prevOrdersRes, yoyOrdersRes] = await Promise.all([
-        sb.from('Orders').select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
-        sb.from('Customers_Core').select('CustomerID,Country,JoinDate').limit(50000),
-        sb.from('RentalTransactions').select('RentalDate,RentalRevenue')
-          .gte('RentalDate', dateFrom).lte('RentalDate', dateTo).limit(50000),
-        sb.from('Orders').select('OrderTotal')
-          .gte('OrderDate', prevFrom).lt('OrderDate', dateFrom).limit(50000),
-        sb.from('Orders').select('OrderDate,OrderTotal')
+      const [allOrders, allCusts, allRentals, prevOrders, yoyOrders] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee')
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
+        fetchAll(() => sb.from('Customers_Core').select('CustomerID,Country,JoinDate')),
+        fetchAll(() => sb.from('RentalTransactions').select('RentalDate,RentalRevenue')
+          .gte('RentalDate', dateFrom).lte('RentalDate', dateTo)),
+        fetchAll(() => sb.from('Orders').select('OrderTotal')
+          .gte('OrderDate', prevFrom).lt('OrderDate', dateFrom)),
+        fetchAll(() => sb.from('Orders').select('OrderDate,OrderTotal')
           .gte('OrderDate', `${lastYear}-01-01`)
-          .lte('OrderDate', `${currentYear}-12-31`).limit(50000),
+          .lte('OrderDate', `${currentYear}-12-31`)),
       ]);
 
-      const allOrders  = ordersRes.data  || [];
-      const allCusts   = custsRes.data   || [];
-      const dashOrderIds = allOrders.map(o=>o.OrderID);
-      const dashLinesRes = dashOrderIds.length
-        ? await sb.from('OrderLines').select('ProductCode,Quantity,LineRevenue').in('OrderID', dashOrderIds).limit(100000)
-        : { data: [] };
-      const allLines   = dashLinesRes.data || [];
-      const allRentals = rentalsRes.data || [];
+      // Join lines in memory rather than .in(dashOrderIds) — with 15k+ orders
+      // that filter would build an unworkably long query string.
+      const dashOrderIdSet = new Set(allOrders.map(o => o.OrderID));
+      const allOrderLines = await fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity,LineRevenue'));
+      const allLines = allOrderLines.filter(l => dashOrderIdSet.has(l.OrderID));
 
       const sum = arr => arr.reduce((s, o) => s + parseFloat(o.OrderTotal || 0), 0);
       const totalRevenue    = sum(allOrders);
-      const prevRevenue     = sum(prevOrdersRes.data || []);
+      const prevRevenue     = sum(prevOrders);
       const rentalRevenue   = allRentals.reduce((s, r) => s + parseFloat(r.RentalRevenue || 0), 0);
       const shippingRevenue = allOrders.filter(o => o.Channel === 'Shipping').reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
       const instoreRevenue  = allOrders.filter(o => o.Channel === 'In-Store').reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
@@ -171,7 +273,7 @@ async function handler(req, res) {
 
       // Year-over-year: group by YYYY-MM for current and last year
       const yoy = { [currentYear]: {}, [lastYear]: {} };
-      for (const o of (yoyOrdersRes.data || [])) {
+      for (const o of yoyOrders) {
         const yr = +o.OrderDate.slice(0,4);
         const mo = o.OrderDate.slice(5,7);
         if (!yoy[yr]) continue;
@@ -213,8 +315,8 @@ async function handler(req, res) {
       const recentCustMap = {};
       if (recentCustIds.length) {
         const { data: cores } = await sb.from('Customers_Core')
-          .select('CustomerID,FirstName,LastName').in('CustomerID', recentCustIds);
-        for (const c of (cores||[])) recentCustMap[c.CustomerID] = c.FirstName[0]+'. '+c.LastName;
+          .select('CustomerID,FirstName,LastName,Country').in('CustomerID', recentCustIds);
+        for (const c of (cores||[])) recentCustMap[c.CustomerID] = { display: c.FirstName[0]+'. '+c.LastName, country: c.Country || '—' };
       }
 
       const newCustomers = allCusts.filter(c => c.JoinDate >= dateFrom && c.JoinDate <= dateTo).length;
@@ -233,7 +335,11 @@ async function handler(req, res) {
         topSellerUnits:  topSku ? topSku[1] : 0,
         daily, monthly, yoyData,
         dowCounts, topCountries,
-        recentOrders: (recentRaw||[]).map(o=>({...o, customerDisplay: recentCustMap[o.CustID]||'—'})),
+        recentOrders: (recentRaw||[]).map(o=>({
+          ...o,
+          customerDisplay: recentCustMap[o.CustID]?.display || '—',
+          country:         recentCustMap[o.CustID]?.country || '—',
+        })),
       });
     }
 
@@ -270,16 +376,16 @@ async function handler(req, res) {
 
     // ── Customers ────────────────────────────────────────────
     if (section === 'customers') {
-      const [coreRes, contactRes, ordersRes] = await Promise.all([
-        sb.from('Customers_Core').select('*').order('JoinDate', { ascending: false }).limit(50000),
-        sb.from('Customers_Contact').select('*').limit(50000),
-        sb.from('Orders').select('CustID,OrderTotal,OrderDate').limit(50000),
+      const [customersCore, customersContact, custOrders] = await Promise.all([
+        fetchAll(() => sb.from('Customers_Core').select('*').order('JoinDate', { ascending: false })),
+        fetchAll(() => sb.from('Customers_Contact').select('*')),
+        fetchAll(() => sb.from('Orders').select('CustID,OrderTotal,OrderDate')),
       ]);
 
       const contactMap = {};
-      for (const c of (contactRes.data||[])) contactMap[c.CustomerID] = c;
+      for (const c of customersContact) contactMap[c.CustomerID] = c;
       const ordersByCust = {};
-      for (const o of (ordersRes.data||[])) {
+      for (const o of custOrders) {
         if (!ordersByCust[o.CustID]) ordersByCust[o.CustID] = { count:0, total:0, last:'', years: new Set() };
         ordersByCust[o.CustID].count++;
         ordersByCust[o.CustID].total += parseFloat(o.OrderTotal||0);
@@ -287,7 +393,7 @@ async function handler(req, res) {
         if (o.OrderDate > ordersByCust[o.CustID].last) ordersByCust[o.CustID].last = o.OrderDate;
       }
 
-      const customers = (coreRes.data||[]).map(c=>({
+      const customers = customersCore.map(c=>({
         ...c,
         email:         contactMap[c.CustomerID]?.Email || '—',
         loyalty:       contactMap[c.CustomerID]?.LoyaltyMember || false,
@@ -299,7 +405,7 @@ async function handler(req, res) {
       // Retention by cohort year
       const cohortFirst = {};
       const custYears   = {};
-      for (const o of (ordersRes.data||[])) {
+      for (const o of custOrders) {
         const yr = o.OrderDate.slice(0,4);
         if (!cohortFirst[o.CustID] || yr < cohortFirst[o.CustID]) cohortFirst[o.CustID] = yr;
         if (!custYears[o.CustID]) custYears[o.CustID] = new Set();
@@ -353,20 +459,21 @@ async function handler(req, res) {
 
     // ── Products ─────────────────────────────────────────────
     if (section === 'products') {
-      const [ordersDateRes, productsRes] = await Promise.all([
-        sb.from('Orders').select('OrderID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
+      const [dateOrders, productsRes] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
         sb.from('products').select('sku,name,category,subcategory,price').limit(5000),
       ]);
-      const orderIds = (ordersDateRes.data||[]).map(o=>o.OrderID);
-      const linesRes = orderIds.length
-        ? await sb.from('OrderLines').select('OrderID,ProductCode,Quantity,LineRevenue,LineCost').in('OrderID', orderIds).limit(200000)
-        : { data: [] };
+      // Join in memory rather than .in(orderIds) — with 15k+ orders that
+      // filter would build an unworkably long query string.
+      const prodOrderIdSet = new Set(dateOrders.map(o=>o.OrderID));
+      const allOrderLines = await fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity,LineRevenue,LineCost'));
+      const linesInRange = allOrderLines.filter(l => prodOrderIdSet.has(l.OrderID));
 
       const meta = {};
       for (const p of (productsRes.data||[])) meta[p.sku] = p;
 
       const byProd = {};
-      for (const l of (linesRes.data||[])) {
+      for (const l of linesInRange) {
         if (!byProd[l.ProductCode]) byProd[l.ProductCode] = { sku:l.ProductCode, units:0, revenue:0, cost:0 };
         byProd[l.ProductCode].units   += l.Quantity;
         byProd[l.ProductCode].revenue += parseFloat(l.LineRevenue||0);
@@ -393,18 +500,16 @@ async function handler(req, res) {
 
     // ── Rentals ──────────────────────────────────────────────
     if (section === 'rentals') {
-      const [rentalsRes, salesRes, productsRes] = await Promise.all([
-        sb.from('RentalTransactions')
+      const [allRentals, allSales, productsRes] = await Promise.all([
+        fetchAll(() => sb.from('RentalTransactions')
           .select('RentalID,RentalDate,CustID,SKU,Quantity,DailyRate,RentalRevenue,Returned')
           .gte('RentalDate', dateFrom).lte('RentalDate', dateTo)
-          .order('RentalDate', { ascending: false }).limit(50000),
-        sb.from('Orders').select('OrderDate,OrderTotal')
-          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
+          .order('RentalDate', { ascending: false })),
+        fetchAll(() => sb.from('Orders').select('OrderDate,OrderTotal')
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
         sb.from('products').select('sku,category').limit(5000),
       ]);
 
-      const allRentals = rentalsRes.data  || [];
-      const allSales   = salesRes.data    || [];
       const skuCat     = {};
       for (const p of (productsRes.data||[])) skuCat[p.sku] = p.category;
 
@@ -465,29 +570,26 @@ async function handler(req, res) {
 
     // ── Promos ───────────────────────────────────────────────
     if (section === 'promos') {
-      const [promosRes, opRes] = await Promise.all([
-        sb.from('Promotions').select('*').order('StartDate', { ascending: false }).limit(1000),
-        sb.from('OrderPromotions').select('PromoCode,OrderID').limit(100000),
+      // Fetch all orders + lines once and derive both the promo subset and
+      // the effectiveness comparison from them in memory — with 14k+ promo
+      // links, filtering via .in(promoOrderIds) would build an unworkably
+      // long query string.
+      const [promosData, opData, allOrders, allOrderLines] = await Promise.all([
+        sb.from('Promotions').select('*').order('StartDate', { ascending: false }).limit(1000).then(r => r.data || []),
+        fetchAll(() => sb.from('OrderPromotions').select('PromoCode,OrderID')),
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderTotal')),
+        fetchAll(() => sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue')),
       ]);
 
-      const opData = opRes.data || [];
-
-      // Fetch only the specific orders that appear in OrderPromotions
       const promoOrderSet = new Set(opData.map(op => op.OrderID));
-      const promoOrderIds = [...promoOrderSet];
-      // Fetch promo orders by exact IDs + all orders for effectiveness comparison
-      const [promoOrdersRes, allOrdersRes, linesRes] = await (promoOrderIds.length ? Promise.all([
-        sb.from('Orders').select('OrderID,OrderTotal').in('OrderID', promoOrderIds).limit(50000),
-        sb.from('Orders').select('OrderID,OrderTotal').limit(50000),
-        sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue').in('OrderID', promoOrderIds).limit(200000),
-      ]) : Promise.all([{ data:[] }, { data:[] }, { data:[] }]));
 
       const orderTotals = {};
-      for (const o of (promoOrdersRes.data||[])) orderTotals[o.OrderID] = parseFloat(o.OrderTotal||0);
+      for (const o of allOrders) orderTotals[o.OrderID] = parseFloat(o.OrderTotal||0);
 
       // Sacrificed revenue per order = sum(UnitPrice*Qty - LineRevenue) for its lines
       const sacrificedByOrder = {};
-      for (const l of (linesRes.data||[])) {
+      for (const l of allOrderLines) {
+        if (!promoOrderSet.has(l.OrderID)) continue;
         const full = parseFloat(l.UnitPrice||0) * (l.Quantity||1);
         const paid = parseFloat(l.LineRevenue||0);
         sacrificedByOrder[l.OrderID] = (sacrificedByOrder[l.OrderID]||0) + Math.max(0, full - paid);
@@ -503,14 +605,13 @@ async function handler(req, res) {
       }
 
       // Overall effectiveness
-      const orderData = allOrdersRes.data || [];
       let revenueWithPromo = 0, revenueNoPromo = 0, ordersWithPromo = 0, ordersNoPromo = 0;
-      for (const o of orderData) {
+      for (const o of allOrders) {
         if (promoOrderSet.has(o.OrderID)) { revenueWithPromo += parseFloat(o.OrderTotal||0); ordersWithPromo++; }
         else                              { revenueNoPromo   += parseFloat(o.OrderTotal||0); ordersNoPromo++;   }
       }
 
-      const promos = (promosRes.data||[]).map(p=>({
+      const promos = promosData.map(p=>({
         ...p,
         orderCount: orderCounts[p.PromoCode]||0,
         revenue:    +((promoRevenue[p.PromoCode]||0).toFixed(2)),
@@ -571,28 +672,19 @@ async function handler(req, res) {
       const currentYear = new Date().getFullYear();
       const lastYear    = currentYear - 1;
 
-      const [ordersRes, rentalsRes, custsRes, prevOrdersRes] = await Promise.all([
-        sb.from('Orders').select('OrderID,OrderDate,OrderTotal,CustID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo).limit(50000),
-        sb.from('RentalTransactions').select('RentalDate,RentalRevenue').gte('RentalDate', dateFrom).lte('RentalDate', dateTo).limit(50000),
-        sb.from('Customers_Core').select('CustomerID').limit(50000),
-        sb.from('Orders').select('OrderTotal').gte('OrderDate', `${lastYear}-01-01`).lte('OrderDate', `${lastYear}-12-31`).limit(50000),
+      const [orders, rentals, prevYearOrders] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate,OrderTotal,CustID').gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
+        fetchAll(() => sb.from('RentalTransactions').select('RentalDate,RentalRevenue').gte('RentalDate', dateFrom).lte('RentalDate', dateTo)),
+        fetchAll(() => sb.from('Orders').select('OrderTotal').gte('OrderDate', `${lastYear}-01-01`).lte('OrderDate', `${lastYear}-12-31`)),
       ]);
 
-      const orders  = ordersRes.data  || [];
-      const rentals = rentalsRes.data || [];
-
-      // Fetch lines via two-step join
-      const orderIds = orders.map(o=>o.OrderID);
-      const linesRes = orderIds.length
-        ? await sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue,LineCost').in('OrderID', orderIds).limit(200000)
-        : { data: [] };
-      const lines = linesRes.data || [];
-
-      // Also fetch promo discount data
-      const opRes = orderIds.length
-        ? await sb.from('OrderPromotions').select('OrderID').in('OrderID', orderIds).limit(100000)
-        : { data: [] };
-      const promoOrderSet = new Set((opRes.data||[]).map(op=>op.OrderID));
+      // Join lines in memory rather than .in(orderIds) — with 15k+ orders
+      // that filter would build an unworkably long query string.
+      const orderIdSet = new Set(orders.map(o=>o.OrderID));
+      const allOrderLines = orders.length
+        ? await fetchAll(() => sb.from('OrderLines').select('OrderID,UnitPrice,Quantity,LineRevenue,LineCost'))
+        : [];
+      const lines = allOrderLines.filter(l => orderIdSet.has(l.OrderID));
 
       const salesRevenue  = orders.reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
       const rentalRevenue = rentals.reduce((s,r)=>s+parseFloat(r.RentalRevenue||0),0);
@@ -617,7 +709,7 @@ async function handler(req, res) {
       const repeatRate  = totalCusts > 0 ? repeatCusts/totalCusts*100 : 0;
 
       // YoY growth
-      const prevRevenue = (prevOrdersRes.data||[]).reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
+      const prevRevenue = prevYearOrders.reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
       const yoyGrowth   = prevRevenue > 0 ? (salesRevenue - prevRevenue)/prevRevenue*100 : null;
 
       // Monthly revenue + gross profit
