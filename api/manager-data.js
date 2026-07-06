@@ -353,25 +353,25 @@ async function handler(req, res) {
 
     // ── Orders ───────────────────────────────────────────────
     if (section === 'orders') {
-      const { data: orders } = await sb.from('Orders')
-        .select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee,PaymentMethod')
-        .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)
-        .order('OrderDate', { ascending: false }).limit(500);
+      // Return every order in range (the client paginates); fetch the whole
+      // customer tables once and join in memory rather than .in(custIds),
+      // which with thousands of distinct customers would overflow the URL.
+      const [orders, cores, contacts] = await Promise.all([
+        fetchAll(() => sb.from('Orders')
+          .select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee,PaymentMethod')
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)
+          .order('OrderDate', { ascending: false })),
+        fetchAll(() => sb.from('Customers_Core').select('CustomerID,FirstName,LastName,Country')),
+        fetchAll(() => sb.from('Customers_Contact').select('CustomerID,Email')),
+      ]);
 
-      const custIds = [...new Set((orders||[]).map(o=>o.CustID).filter(Boolean))];
       const custMap = {};
-      if (custIds.length) {
-        const [coreRes, contactRes] = await Promise.all([
-          sb.from('Customers_Core').select('CustomerID,FirstName,LastName,Country').in('CustomerID', custIds),
-          sb.from('Customers_Contact').select('CustomerID,Email').in('CustomerID', custIds),
-        ]);
-        for (const c of (coreRes.data||[]))    custMap[c.CustomerID] = { name:c.FirstName+' '+c.LastName, country:c.Country, id:c.CustomerID };
-        for (const c of (contactRes.data||[])) if (custMap[c.CustomerID]) custMap[c.CustomerID].email = c.Email;
-      }
+      for (const c of cores)    custMap[c.CustomerID] = { name:c.FirstName+' '+c.LastName, country:c.Country, id:c.CustomerID };
+      for (const c of contacts) if (custMap[c.CustomerID]) custMap[c.CustomerID].email = c.Email;
 
       const threeDaysAgo = daysAgo(3);
       return res.json({
-        orders: (orders||[]).map(o=>({
+        orders: orders.map(o=>({
           ...o,
           customerName:   custMap[o.CustID]?.name    || '—',
           customerId:     custMap[o.CustID]?.id       || null,
