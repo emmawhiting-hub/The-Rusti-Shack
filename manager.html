@@ -107,6 +107,21 @@
   .btn-sm{padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:12px}
   .btn-sm:hover{border-color:var(--teal);color:var(--teal)}
   .btn-sm:disabled{opacity:.4;cursor:default;border-color:var(--border);color:var(--muted)}
+
+  /* Forecast controls */
+  .fc-models{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .fc-model-btn{flex:1;min-width:150px;text-align:left;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;transition:all .15s}
+  .fc-model-btn:hover{border-color:var(--teal)}
+  .fc-model-btn.active{border-color:var(--teal);background:var(--teal-light);box-shadow:0 0 0 1px var(--teal) inset}
+  .fc-model-btn .fc-m-name{font-size:13px;font-weight:700;color:var(--text)}
+  .fc-model-btn .fc-m-err{font-size:11px;color:var(--muted);margin-top:2px}
+  .fc-model-btn.active .fc-m-name{color:var(--navy-dark)}
+  .fc-horizon-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .fc-horizon-row input[type=range]{flex:1;accent-color:var(--teal)}
+  #fc-horizon-label{font-size:13px;font-weight:600;white-space:nowrap;min-width:90px;text-align:right;color:var(--navy-dark)}
+  .fc-info-section{margin-bottom:16px}
+  .fc-info-section h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+  .fc-info-section p{font-size:13px;line-height:1.5;color:var(--text)}
   table{width:100%;border-collapse:collapse}
   th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
   th:hover{color:var(--teal)}
@@ -207,6 +222,7 @@
     <div class="nav-item" data-section="promos"><span class="icon">&#9679;</span> Promotions</div>
     <div class="nav-section">Finance</div>
     <div class="nav-item" data-section="financials"><span class="icon">&#9679;</span> Financials</div>
+    <div class="nav-item" data-section="forecast"><span class="icon">&#9679;</span> Forecast</div>
   </div>
 
   <div class="main">
@@ -522,6 +538,48 @@
       </div>
     </div>
 
+    <!-- Forecast -->
+    <div class="section" id="sec-forecast">
+      <div class="section-header"><div class="section-title">Forecast</div></div>
+      <div id="forecast-loading" class="spinner"></div>
+      <div id="forecast-content" style="display:none">
+
+        <!-- Historicals -->
+        <div class="chart-row cols-1">
+          <div class="chart-card">
+            <h3>Historical Performance — Revenue &amp; Gross Margin</h3>
+            <div class="chart-wrap tall"><canvas id="chartHist"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Forecast -->
+        <div class="chart-card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            <div>
+              <div id="fc-title" style="font-size:17px;font-weight:700;line-height:1.3"></div>
+              <div id="fc-sub" style="font-size:12px;color:var(--muted);margin-top:3px"></div>
+            </div>
+            <button class="btn-sm" id="fc-info-btn" onclick="openForecastInfo()" title="How this model works" style="white-space:nowrap">&#9432; How it works</button>
+          </div>
+
+          <div id="fc-models" class="fc-models"></div>
+
+          <div class="fc-horizon-row">
+            <span style="font-size:12px;color:var(--muted);white-space:nowrap">Forecast horizon</span>
+            <input type="range" id="fc-horizon" min="1" max="24" value="6" oninput="onHorizonChange()">
+            <span id="fc-horizon-label"></span>
+          </div>
+
+          <div class="chart-wrap tall"><canvas id="chartForecast"></canvas></div>
+          <div style="font-size:11px;color:var(--muted2);margin-top:10px">
+            Solid line is actual history; dashed line is the forecast. The shaded band is the 80% likely range —
+            it widens the further out you look, because the future gets less certain.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -537,6 +595,17 @@
       <h4 style="margin-bottom:10px;font-size:13px;color:var(--muted)">ORDER HISTORY</h4>
       <div id="modal-orders-wrap"></div>
     </div>
+  </div>
+</div>
+
+<!-- Forecast model info modal -->
+<div class="modal-overlay" id="fc-info-modal">
+  <div class="modal" style="width:520px">
+    <div class="modal-head">
+      <h2 id="fc-info-title">About this model</h2>
+      <button class="modal-close" onclick="closeForecastInfo()">&#x2715;</button>
+    </div>
+    <div class="modal-body" id="fc-info-body"></div>
   </div>
 </div>
 
@@ -655,6 +724,7 @@ async function loadSection(sec) {
   if (sec === 'rentals')    await loadRentals();
   if (sec === 'promos')     await loadPromos();
   if (sec === 'financials') await loadFinancials();
+  if (sec === 'forecast')   await loadForecast();
   _loaded[sec] = true;
 }
 
@@ -1327,6 +1397,174 @@ async function loadFinancials() {
 
   } catch (e) { document.getElementById('financials-loading').innerHTML = err(e); }
 }
+
+// ── Forecast ────────────────────────────────────────────────────────
+let _fcData = null, _fcModel = 'holtwinters', _fcHorizon = 6;
+
+const FC_BLURBS = {
+  linear: {
+    name: 'Linear Trend',
+    what: 'Draws the single straight line that best fits your monthly revenue and simply extends it into the future.',
+    assumes: 'That growth keeps going at the same steady pace, and that month-to-month seasonal swings don’t matter.',
+    trust: 'Good for a calm, big-picture baseline of where things are heading. It will miss your seasonal peaks and dips, so trust it least when a specific month is unusually high or low for the season.',
+  },
+  seasonal: {
+    name: 'Seasonal Naive',
+    what: 'Assumes each future month will look like the same month one year earlier, scaled up (or down) by your recent year-over-year growth.',
+    assumes: 'That your calendar repeats — this July resembles last July — and that recent growth carries forward.',
+    trust: 'Great when your business has a strong, repeating seasonal rhythm. It leans heavily on a single past year, so it can overreact if last year had an odd month.',
+  },
+  holtwinters: {
+    name: 'Holt-Winters',
+    what: 'Tracks three things at once — the current level, the trend, and the repeating yearly season — giving recent months more weight as it updates.',
+    assumes: 'That there is both an underlying trend and a yearly seasonal pattern, and that the most recent months are the best guide.',
+    trust: 'Usually the most accurate of the three here because it blends trend and season. It needs a couple of years of history to lock onto the seasonal pattern, which you have.',
+  },
+};
+
+async function loadForecast() {
+  show('forecast-loading'); hide('forecast-content');
+  try {
+    _fcData = await api({ section: 'forecast' });
+    // Default to the model with the lowest typical error.
+    const best = [..._fcData.models].filter(m => m.mape != null).sort((a, b) => a.mape - b.mape)[0];
+    if (best) _fcModel = best.key;
+    hide('forecast-loading'); show('forecast-content');
+    renderHistChart();
+    renderForecastModels();
+    onHorizonChange();  // sets label + renders forecast chart + title
+  } catch (e) { document.getElementById('forecast-loading').innerHTML = err(e); }
+}
+
+function renderHistChart() {
+  const h = _fcData.history;
+  mkChart('chartHist', {
+    type:'line',
+    data: {
+      labels: h.map(r => r.month),
+      datasets: [
+        { label:'Revenue', yAxisID:'y', data:h.map(r=>r.revenue),
+          borderColor:'#00B4A0', backgroundColor:'rgba(0,180,160,.10)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+        { label:'Gross Margin %', yAxisID:'y1', data:h.map(r=>r.margin),
+          borderColor:'#E8622A', backgroundColor:'transparent', fill:false, tension:.3, pointRadius:0, borderWidth:2, spanGaps:true },
+      ]
+    },
+    options: { ...baseOpts(), interaction:{mode:'index',intersect:false}, scales:{
+      x:{ ticks:{color:'#6b7a8d',autoSkip:true,maxTicksLimit:12}, grid:{display:false} },
+      y:{ position:'left', ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'}, title:{display:true,text:'Revenue',color:'#6b7a8d'} },
+      y1:{ position:'right', min:0, max:100, ticks:{callback:v=>v+'%',color:'#E8622A'}, grid:{display:false}, title:{display:true,text:'Margin',color:'#E8622A'} },
+    }, plugins:{ ...baseOpts().plugins, tooltip:{ callbacks:{ label:c=> c.dataset.label==='Revenue' ? ' Revenue: $'+fmt(c.raw) : ' Margin: '+(c.raw==null?'—':c.raw+'%') } } } }
+  });
+}
+
+function renderForecastModels() {
+  document.getElementById('fc-models').innerHTML = _fcData.models.map(m => {
+    const errTxt = m.mape != null ? '±' + (m.mape*100).toFixed(0) + '% typical error' : 'error n/a';
+    return `<div class="fc-model-btn ${m.key===_fcModel?'active':''}" onclick="selectForecastModel('${m.key}')">
+      <div class="fc-m-name">${m.name}</div><div class="fc-m-err">${errTxt}</div></div>`;
+  }).join('');
+}
+
+function selectForecastModel(key) {
+  _fcModel = key;
+  renderForecastModels();
+  onHorizonChange();
+}
+
+function onHorizonChange() {
+  _fcHorizon = +document.getElementById('fc-horizon').value;
+  document.getElementById('fc-horizon-label').textContent =
+    _fcHorizon + (_fcHorizon === 1 ? ' month' : ' months') + ' ahead';
+  renderForecastChart();
+  renderForecastTitle();
+}
+
+function renderForecastTitle() {
+  const model = _fcData.models.find(m => m.key === _fcModel);
+  const hist = _fcData.history;
+  const end = model.forecast[_fcHorizon - 1];
+
+  // Compare year-over-year (same month a year earlier) so the takeaway isn't
+  // distorted by seasonality — e.g. a low spring month vs a peak summer one.
+  // If that prior month is itself beyond history, use its projected value so
+  // the comparison stays seasonally aligned at any horizon.
+  const [ey, em] = end.month.split('-').map(Number);
+  const priorMonth = (ey - 1) + '-' + String(em).padStart(2, '0');
+  const valueFor = mo => {
+    const hr = hist.find(r => r.month === mo); if (hr) return { v: hr.revenue, proj: false };
+    const fr = model.forecast.find(f => f.month === mo); if (fr) return { v: fr.mean, proj: true };
+    return null;
+  };
+  const prior = valueFor(priorMonth);
+  let pct = null, basis = '';
+  if (prior && prior.v > 0) {
+    pct = (end.mean - prior.v) / prior.v * 100;
+    basis = prior.proj ? 'vs the same month a year earlier (projected)' : 'vs the same month last year';
+  } else {
+    const last = hist[hist.length-1].revenue;
+    if (last > 0) { pct = (end.mean - last) / last * 100; basis = 'vs the latest actual month'; }
+  }
+
+  const dir   = pct == null ? 'reach' : pct >= 4 ? 'grow to' : pct <= -4 ? 'ease to' : 'hold near';
+  const arrow = pct == null ? '▬' : pct >= 4 ? '▲' : pct <= -4 ? '▼' : '▬';
+  const pctTxt = pct == null ? '' : (Math.abs(pct) < 1 ? 'about flat ' : (pct>=0?'+':'−') + Math.abs(pct).toFixed(0) + '% ') + basis;
+  document.getElementById('fc-title').innerHTML =
+    `${arrow} Revenue is projected to ${dir} about <span style="color:var(--teal)">$${fmt(end.mean)}</span> by ${monthLabel(end.month)}`;
+  document.getElementById('fc-sub').textContent =
+    `${model.name} model` + (pctTxt ? ` · ${pctTxt}` : '') + ` · 80% likely range shaded · typical error ±${(model.mape*100).toFixed(0)}%`;
+}
+
+function monthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] + ' ' + y;
+}
+
+function renderForecastChart() {
+  const d = _fcData;
+  const model = d.models.find(m => m.key === _fcModel);
+  const hist = d.history;
+  const fc = model.forecast.slice(0, _fcHorizon);
+  const nH = hist.length;
+  const labels = [...hist.map(h=>h.month), ...fc.map(f=>f.month)];
+  const connect = (buildFuture) => hist.map((h,i)=> i===nH-1 ? h.revenue : null).concat(buildFuture);
+
+  const histLine = hist.map(h=>h.revenue).concat(fc.map(()=>null));
+  const meanLine = connect(fc.map(f=>f.mean));
+  const lowLine  = connect(fc.map(f=>f.lower));
+  const upLine   = connect(fc.map(f=>f.upper));
+
+  mkChart('chartForecast', {
+    type:'line',
+    data:{ labels, datasets:[
+      // band: lower (invisible line) then upper filled down to lower
+      { label:'_band_low', data:lowLine, borderColor:'transparent', pointRadius:0, fill:false },
+      { label:'_band_up',  data:upLine,  borderColor:'transparent', pointRadius:0, fill:'-1', backgroundColor:'rgba(26,122,158,.15)' },
+      { label:'History',   data:histLine, borderColor:'#00B4A0', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, tension:.25 },
+      { label:'Forecast',  data:meanLine, borderColor:'#1A7A9E', backgroundColor:'transparent', borderWidth:2.5, borderDash:[6,4], pointRadius:0, tension:.25 },
+    ]},
+    options:{ ...baseOpts(), interaction:{mode:'index',intersect:false}, scales:{
+      x:{ ticks:{color:'#6b7a8d',autoSkip:true,maxTicksLimit:12}, grid:{display:false} },
+      y:{ ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} },
+    }, plugins:{ ...baseOpts().plugins,
+      legend:{ labels:{ color:'#6b7a8d', font:{size:11}, filter:i=>!i.text.startsWith('_band') } },
+      tooltip:{ filter:i=>!i.dataset.label.startsWith('_band'), callbacks:{ label:c=>' '+c.dataset.label+': $'+fmt(c.raw) } }
+    } }
+  });
+}
+
+function openForecastInfo() {
+  const model = _fcData.models.find(m => m.key === _fcModel);
+  const b = FC_BLURBS[model.key];
+  document.getElementById('fc-info-title').textContent = b.name + '  —  typical error ±' + (model.mape*100).toFixed(0) + '%';
+  document.getElementById('fc-info-body').innerHTML = `
+    <div class="fc-info-section"><h4>What it does</h4><p>${b.what}</p></div>
+    <div class="fc-info-section"><h4>What it assumes</h4><p>${b.assumes}</p></div>
+    <div class="fc-info-section"><h4>When to trust it</h4><p>${b.trust}</p></div>
+    <div class="fc-info-section"><h4>Typical error</h4><p>On average, its one-month-ahead prediction has been off by about ${(model.mape*100).toFixed(0)}%, measured by replaying history month by month. Lower is better.</p></div>`;
+  document.getElementById('fc-info-modal').classList.add('open');
+}
+function closeForecastInfo() { document.getElementById('fc-info-modal').classList.remove('open'); }
+document.getElementById('fc-info-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeForecastInfo(); });
 
 // ── Sort ────────────────────────────────────────────────────────────
 const _sortState = {};

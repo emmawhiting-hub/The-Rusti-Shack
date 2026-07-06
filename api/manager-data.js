@@ -31,6 +31,135 @@ async function fetchAll(buildQuery) {
   return all;
 }
 
+// ── Forecasting helpers (real statistical models, no AI) ──────────────
+const SEASON = 12;              // monthly seasonality period
+const FC_Z   = 1.28;            // ~80% prediction interval
+const FC_HMAX = 24;             // forecast up to 24 months ahead
+
+const fcMean = a => a.reduce((s, x) => s + x, 0) / (a.length || 1);
+function fcStd(a) {
+  if (a.length < 2) return 0;
+  const m = fcMean(a);
+  return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1));
+}
+function fcMedian(a) {
+  if (!a.length) return 0;
+  const b = [...a].sort((x, y) => x - y);
+  const i = Math.floor(b.length / 2);
+  return b.length % 2 ? b[i] : (b[i - 1] + b[i]) / 2;
+}
+function addMonths(ym, k) {
+  let [y, m] = ym.split('-').map(Number);
+  const idx = y * 12 + (m - 1) + k;
+  return Math.floor(idx / 12) + '-' + String(idx % 12 + 1).padStart(2, '0');
+}
+// Rolling one-step-ahead backtest → MAPE (mean absolute % error).
+function fcBacktest(y, predictNext, start) {
+  let sum = 0, c = 0;
+  for (let t = start; t < y.length; t++) {
+    const f = predictNext(y.slice(0, t));
+    if (y[t] > 0 && isFinite(f)) { sum += Math.abs(y[t] - f) / y[t]; c++; }
+  }
+  return c ? +(sum / c).toFixed(4) : null;
+}
+
+// Model 1 — Linear trend (ordinary least squares). Prediction interval uses
+// the exact OLS formula, so the band widens as the horizon moves away from
+// the centre of the data.
+function fcLinear(y, H, btStart) {
+  const n = y.length;
+  const fit = yy => {
+    const k = yy.length; let st = 0, sy = 0, stt = 0, sty = 0;
+    for (let t = 0; t < k; t++) { st += t; sy += yy[t]; stt += t * t; sty += t * yy[t]; }
+    const b = (k * sty - st * sy) / (k * stt - st * st);
+    return { a: (sy - b * st) / k, b };
+  };
+  const { a, b } = fit(y);
+  const resid = y.map((v, t) => v - (a + b * t));
+  const sigma = Math.sqrt(resid.reduce((s, r) => s + r * r, 0) / Math.max(1, n - 2));
+  const tbar = (n - 1) / 2; let Sxx = 0;
+  for (let t = 0; t < n; t++) Sxx += (t - tbar) ** 2;
+  const means = [], lower = [], upper = [];
+  for (let h = 1; h <= H; h++) {
+    const tt = n - 1 + h, m = a + b * tt;
+    const se = sigma * Math.sqrt(1 + 1 / n + (tt - tbar) ** 2 / Sxx);
+    means.push(m); lower.push(Math.max(0, m - FC_Z * se)); upper.push(m + FC_Z * se);
+  }
+  const mape = fcBacktest(y, yy => { const f = fit(yy); return f.a + f.b * yy.length; }, btStart);
+  return { means, lower, upper, mape };
+}
+
+// Model 2 — Seasonal naive with growth. Each future month = the same month a
+// year earlier, scaled by the typical year-over-year growth factor.
+function fcSeasonalNaive(y, H, btStart) {
+  const n = y.length, s = SEASON;
+  // Year-over-year growth from the most recent 12 months only, so the early
+  // startup period (near-zero → thousands = huge ratios) doesn't inflate it.
+  const growth = yy => {
+    const r = [];
+    for (let t = Math.max(s, yy.length - s); t < yy.length; t++) if (yy[t - s] > 0) r.push(yy[t] / yy[t - s]);
+    return r.length ? fcMedian(r) : 1;
+  };
+  const g = growth(y);
+  const ext = y.slice(), means = [];
+  for (let h = 1; h <= H; h++) { const i = n - 1 + h; const m = ext[i - s] * g; ext[i] = m; means.push(m); }
+  const resid = [];
+  for (let t = s; t < n; t++) if (y[t - s] > 0) resid.push(y[t] - y[t - s] * g);
+  const sigma = fcStd(resid);
+  const lower = [], upper = [];
+  for (let h = 1; h <= H; h++) { const se = sigma * Math.sqrt(h); lower.push(Math.max(0, means[h - 1] - FC_Z * se)); upper.push(means[h - 1] + FC_Z * se); }
+  const mape = fcBacktest(y, yy => { const gg = growth(yy); return yy[yy.length - s] * gg; }, btStart);
+  return { means, lower, upper, mape };
+}
+
+// Model 3 — Holt-Winters additive (triple exponential smoothing): level +
+// trend + seasonal(12). Smoothing params chosen by grid search to minimise
+// one-step squared error.
+function hwRun(y, al, be, ga) {
+  const n = y.length, s = SEASON;
+  let L = fcMean(y.slice(0, s));
+  let T = (fcMean(y.slice(s, 2 * s)) - fcMean(y.slice(0, s))) / s;
+  const seas = [];
+  for (let i = 0; i < s; i++) seas[i] = y[i] - L;
+  const oneStep = [];
+  for (let t = s; t < n; t++) {
+    oneStep.push({ t, pred: L + T + seas[t % s] });
+    const Lprev = L;
+    L = al * (y[t] - seas[t % s]) + (1 - al) * (L + T);
+    T = be * (L - Lprev) + (1 - be) * T;
+    seas[t % s] = ga * (y[t] - L) + (1 - ga) * seas[t % s];
+  }
+  return { L, T, seas, oneStep };
+}
+function hwPick(y) {
+  let best = null;
+  for (let al = 0.1; al <= 0.6; al += 0.1)
+    for (let be = 0.05; be <= 0.35; be += 0.1)
+      for (let ga = 0.1; ga <= 0.5; ga += 0.1) {
+        const r = hwRun(y, al, be, ga);
+        let sse = 0; for (const o of r.oneStep) sse += (y[o.t] - o.pred) ** 2;
+        if (!best || sse < best.sse) best = { al, be, ga, sse };
+      }
+  return best;
+}
+function fcHoltWinters(y, H, btStart) {
+  const n = y.length, s = SEASON;
+  const p = hwPick(y);
+  const r = hwRun(y, p.al, p.be, p.ga);
+  const sigma = fcStd(r.oneStep.map(o => y[o.t] - o.pred));
+  const means = [], lower = [], upper = [];
+  for (let h = 1; h <= H; h++) {
+    const i = n - 1 + h, m = r.L + h * r.T + r.seas[i % s], se = sigma * Math.sqrt(h);
+    means.push(m); lower.push(Math.max(0, m - FC_Z * se)); upper.push(m + FC_Z * se);
+  }
+  const mape = fcBacktest(y, yy => {
+    if (yy.length < 2 * s) return yy[yy.length - 1];
+    const rr = hwRun(yy, p.al, p.be, p.ga);
+    return rr.L + rr.T + rr.seas[yy.length % s];
+  }, btStart);
+  return { means, lower, upper, mape };
+}
+
 async function handler(req, res) {
   const token = req.headers['x-manager-token'] || '';
   if (!validToken(token)) return res.status(401).json({ error: 'Unauthorized' });
@@ -197,6 +326,90 @@ async function handler(req, res) {
 
       const rows = await fetchAll(() => sb.from(tableName).select('*'));
       return res.json({ rows });
+    }
+
+    // ── Forecast: historicals + 3 statistical models ──────────
+    if (section === 'forecast') {
+      // Always uses full history (ignores the top-bar year filter).
+      const [orders, rentals, lines] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate,OrderTotal')),
+        fetchAll(() => sb.from('RentalTransactions').select('RentalDate,RentalRevenue')),
+        fetchAll(() => sb.from('OrderLines').select('OrderID,LineRevenue,LineCost')),
+      ]);
+
+      const salesByMonth = {}, rentByMonth = {}, orderMonth = {};
+      for (const o of orders) {
+        const m = o.OrderDate.slice(0, 7);
+        salesByMonth[m] = (salesByMonth[m] || 0) + parseFloat(o.OrderTotal || 0);
+        orderMonth[o.OrderID] = m;
+      }
+      for (const r of rentals) {
+        const m = (r.RentalDate || '').slice(0, 7);
+        if (m) rentByMonth[m] = (rentByMonth[m] || 0) + parseFloat(r.RentalRevenue || 0);
+      }
+      const lineRevByMonth = {}, lineCostByMonth = {};
+      for (const l of lines) {
+        const m = orderMonth[l.OrderID]; if (!m) continue;
+        lineRevByMonth[m]  = (lineRevByMonth[m]  || 0) + parseFloat(l.LineRevenue || 0);
+        lineCostByMonth[m] = (lineCostByMonth[m] || 0) + parseFloat(l.LineCost || 0);
+      }
+
+      // Continuous month sequence, filling any interior gaps with 0.
+      const monthsSet = new Set([...Object.keys(salesByMonth), ...Object.keys(rentByMonth)]);
+      const sorted = [...monthsSet].sort();
+      const cont = [];
+      for (let m = sorted[0]; m <= sorted[sorted.length - 1]; m = addMonths(m, 1)) cont.push(m);
+
+      let series = cont.map(m => ({
+        month:   m,
+        revenue: +(((salesByMonth[m] || 0) + (rentByMonth[m] || 0))).toFixed(2),
+        lineRev: lineRevByMonth[m] || 0,
+        lineCost: lineCostByMonth[m] || 0,
+      }));
+
+      // Drop trailing incomplete months (e.g. the current partial month, or a
+      // stray month with only a couple of web orders) — a trailing month is
+      // "incomplete" if it's below 25% of the median of the prior 6 months.
+      while (series.length > 13) {
+        const last = series[series.length - 1].revenue;
+        const med  = fcMedian(series.slice(-7, -1).map(s => s.revenue));
+        if (med > 0 && last < 0.25 * med) series.pop(); else break;
+      }
+
+      const history = series.map(s => ({
+        month:   s.month,
+        revenue: s.revenue,
+        margin:  s.lineRev > 0 ? +(((s.lineRev - s.lineCost) / s.lineRev) * 100).toFixed(1) : null,
+      }));
+
+      const y = series.map(s => s.revenue);
+      const n = y.length;
+      const lastMonth = series[n - 1].month;
+      const btStart = n > 2 * SEASON + 6 ? 2 * SEASON : Math.min(SEASON + 1, Math.floor(n / 2));
+      const futureMonths = [];
+      for (let h = 1; h <= FC_HMAX; h++) futureMonths.push(addMonths(lastMonth, h));
+
+      const build = (name, key, blurbKey, r) => ({
+        key, name, blurbKey,
+        mape: r.mape,
+        forecast: futureMonths.map((m, i) => ({
+          month: m,
+          mean:  +r.means[i].toFixed(2),
+          lower: +r.lower[i].toFixed(2),
+          upper: +r.upper[i].toFixed(2),
+        })),
+      });
+
+      const models = [
+        build('Linear Trend',   'linear',  'linear',  fcLinear(y, FC_HMAX, btStart)),
+        build('Seasonal Naive', 'seasonal', 'seasonal', fcSeasonalNaive(y, FC_HMAX, btStart)),
+        build('Holt-Winters',   'holtwinters', 'holtwinters', fcHoltWinters(y, FC_HMAX, btStart)),
+      ];
+
+      return res.json({
+        target: 'Total monthly revenue (sales + rentals)',
+        history, lastMonth, horizonMax: FC_HMAX, band: 80, models,
+      });
     }
 
     // ── Order detail ──────────────────────────────────────────
