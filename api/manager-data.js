@@ -354,30 +354,25 @@ async function handler(req, res) {
     // ── Orders ───────────────────────────────────────────────
     if (section === 'orders') {
       // Return every order in range (the client paginates); fetch the whole
-      // customer tables once and join in memory rather than .in(custIds),
+      // customer table once and join in memory rather than .in(custIds),
       // which with thousands of distinct customers would overflow the URL.
-      const [orders, cores, contacts] = await Promise.all([
+      const [orders, cores] = await Promise.all([
         fetchAll(() => sb.from('Orders')
           .select('OrderID,OrderDate,CustID,OrderTotal,Channel,ShippingFee,PaymentMethod')
           .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)
           .order('OrderDate', { ascending: false })),
         fetchAll(() => sb.from('Customers_Core').select('CustomerID,FirstName,LastName,Country')),
-        fetchAll(() => sb.from('Customers_Contact').select('CustomerID,Email')),
       ]);
 
       const custMap = {};
-      for (const c of cores)    custMap[c.CustomerID] = { name:c.FirstName+' '+c.LastName, country:c.Country, id:c.CustomerID };
-      for (const c of contacts) if (custMap[c.CustomerID]) custMap[c.CustomerID].email = c.Email;
+      for (const c of cores) custMap[c.CustomerID] = { name:c.FirstName+' '+c.LastName, country:c.Country, id:c.CustomerID };
 
-      const threeDaysAgo = daysAgo(3);
       return res.json({
         orders: orders.map(o=>({
           ...o,
           customerName:   custMap[o.CustID]?.name    || '—',
           customerId:     custMap[o.CustID]?.id       || null,
           country:        custMap[o.CustID]?.country  || '—',
-          customerEmail:  custMap[o.CustID]?.email    || null,
-          needsAttention: o.OrderDate < threeDaysAgo && o.Channel === 'Shipping',
         }))
       });
     }

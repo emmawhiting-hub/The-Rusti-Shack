@@ -114,7 +114,6 @@
   th.sorted .sa{opacity:1;color:var(--teal)}
   td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
   tr:last-child td{border-bottom:none}
-  tr.flag-row{background:rgba(232,98,42,.06)}
   tr.expand-trigger:hover td{background:rgba(255,255,255,.03);cursor:pointer}
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
   .badge-teal{background:rgba(0,201,167,.15);color:var(--teal)}
@@ -295,7 +294,6 @@
             <th onclick="sortTable('orders',3,'str')">Country <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('orders',4,'str')">Channel <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('orders',5,'num')">Total <span class="sa">&#8645;</span></th>
-            <th>Status</th>
           </tr></thead>
           <tbody id="orders-body"></tbody></table>
           <div id="orders-pager" style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);font-size:13px">
@@ -542,26 +540,6 @@
   </div>
 </div>
 
-<!-- Ship order modal -->
-<div class="modal-overlay" id="ship-modal">
-  <div class="modal" style="width:480px">
-    <div class="modal-head">
-      <h2>Mark as Shipped</h2>
-      <button class="modal-close" onclick="closeShipModal()">&#x2715;</button>
-    </div>
-    <div class="modal-body">
-      <div class="modal-note" id="ship-note"></div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-        Click <strong style="color:var(--text)">Send Shipping Email</strong> to open a pre-filled email to the customer.
-        Once sent, the order will be marked as <span style="color:var(--teal)">Shipped</span> in this session.
-      </p>
-      <div class="modal-actions">
-        <a id="ship-mailto-link" class="btn-primary" href="#" onclick="confirmShipped()">Send Shipping Email</a>
-        <button class="btn-ghost" onclick="closeShipModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <script>
 // ── State (must be declared before any auto-login call) ────────────
@@ -959,15 +937,7 @@ function changeOrdersPage(delta) {
   document.querySelector('.main').scrollTop = 0;
 }
 
-// Shipped orders stored in localStorage so state persists across renders
-function getShipped() { return new Set(JSON.parse(localStorage.getItem('mgr_shipped') || '[]')); }
-function markShipped(id) {
-  const s = getShipped(); s.add(id);
-  localStorage.setItem('mgr_shipped', JSON.stringify([...s]));
-}
-
 function renderOrdersTable() {
-  const shipped = getShipped();
   const total = _ordersFiltered.length;
   document.getElementById('orders-count').textContent = total.toLocaleString() + ' orders';
 
@@ -988,24 +958,17 @@ function renderOrdersTable() {
   }
 
   document.getElementById('orders-body').innerHTML = pageRows.map(o => {
-    const isShipped = shipped.has(o.OrderID);
-    const statusCell = o.needsAttention && !isShipped
-      ? `<span class="badge badge-coral clickable" onclick="openShipModal('${o.OrderID}','${escQ(o.customerName)}','${escQ(o.customerEmail || '')}','${o.OrderDate}','$${fmt(o.OrderTotal)}')" title="Click to send shipping email">&#9993; Needs Shipping</span>`
-      : isShipped
-        ? '<span class="badge badge-teal">&#10003; Emailed</span>'
-        : '<span class="badge badge-teal">OK</span>';
     return `
-      <tr class="expand-trigger ${o.needsAttention && !isShipped ? 'flag-row' : ''}" onclick="toggleOrderLines('${o.OrderID}')">
+      <tr class="expand-trigger" onclick="toggleOrderLines('${o.OrderID}')">
         <td><span style="color:var(--teal)">${o.OrderID}</span></td>
         <td>${o.OrderDate}</td>
         <td><span style="cursor:pointer;color:var(--navy)" onclick="event.stopPropagation();openCustModal('${o.customerId || ''}','${escQ(o.customerName || '')}')">${o.customerName || '—'}</span></td>
         <td>${o.country || '—'}</td>
         <td>${chBadge(o.Channel)}</td>
         <td>$${fmt(o.OrderTotal)}</td>
-        <td>${statusCell}</td>
       </tr>
       <tr class="expand-row" id="lines-${o.OrderID}">
-        <td colspan="7"><div class="expand-inner" id="lines-inner-${o.OrderID}"><div class="spinner"></div></div></td>
+        <td colspan="6"><div class="expand-inner" id="lines-inner-${o.OrderID}"><div class="spinner"></div></div></td>
       </tr>`;
   }).join('');
 }
@@ -1024,32 +987,6 @@ async function toggleOrderLines(orderId) {
     </tbody></table>${promoHtml}`;
   } catch { inner.innerHTML = '<p style="color:var(--coral);padding:12px">Could not load lines.</p>'; }
 }
-
-// Ship modal
-let _pendingShipOrderId = null;
-function openShipModal(orderId, custName, email, date, total) {
-  _pendingShipOrderId = orderId;
-  document.getElementById('ship-note').innerHTML =
-    `<strong>Order ${orderId}</strong> &mdash; ${custName}<br>Ordered ${date} &bull; ${total}<br>` +
-    (email ? `Shipping email to: <strong>${email}</strong>` : '<em style="color:var(--coral)">No email on file for this customer.</em>');
-  const subject = encodeURIComponent(`Your Rusti Shack order ${orderId} has shipped!`);
-  const body    = encodeURIComponent(
-    `Hi ${custName},\n\nGreat news — your order ${orderId} has shipped! ` +
-    `You can expect delivery within 7–14 business days depending on your location.\n\n` +
-    `If you have any questions, just reply to this email.\n\nThanks for shopping with us!\n\nThe Rusti Shack Team\napo-island.rustishack.com`
-  );
-  document.getElementById('ship-mailto-link').href = email ? `mailto:${email}?subject=${subject}&body=${body}` : '#';
-  document.getElementById('cust-modal').classList.remove('open');
-  document.getElementById('ship-modal').classList.add('open');
-}
-function closeShipModal() { document.getElementById('ship-modal').classList.remove('open'); _pendingShipOrderId = null; }
-function confirmShipped() {
-  if (_pendingShipOrderId) {
-    markShipped(_pendingShipOrderId);
-    setTimeout(() => { closeShipModal(); renderOrdersTable(); }, 300);
-  }
-}
-document.getElementById('ship-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeShipModal(); });
 
 // ── Customers ──────────────────────────────────────────────────────
 let _custsData = [], _custsFiltered = [];
