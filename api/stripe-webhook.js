@@ -43,6 +43,11 @@ async function writeOrder(supabase, session) {
   for (let i = 0; i < cartItems.length; i++) {
     const { sku, qty } = cartItems[i];
     const unitPrice = PRODUCT_PRICES[sku] || 0;
+    // LineRevenue is a generated column; LineCost is not, so set it here from
+    // the SKU's historical cost ratio. Without this, web orders would have a
+    // null LineCost and inflate gross margin to 100% in the financials view.
+    const lineRevenue = unitPrice * qty;
+    const lineCost = +(lineRevenue * await costRatioForSku(supabase, sku)).toFixed(2);
     const { error: lineErr } = await supabase.from('OrderLines').insert({
       OrderID:     orderCode,
       LineNumber:  i + 1,
@@ -50,11 +55,46 @@ async function writeOrder(supabase, session) {
       Quantity:    qty,
       UnitPrice:   unitPrice,
       DiscountPct: 0,
+      LineCost:    lineCost,
     });
     if (lineErr) console.error('OrderLines insert error:', lineErr.message);
   }
 
+  await decrementInventory(supabase, cartItems);
+
   console.log(`Order written to DB: ${orderCode} | customer: ${customerId} | total: ${total}`);
+}
+
+// Historical cost/revenue ratio for a SKU, used to estimate LineCost on web
+// orders. Falls back to the overall average (~0.42) when a SKU has no priced
+// history. Cached per invocation to avoid repeat queries for repeat SKUs.
+const OVERALL_COST_RATIO = 0.42;
+const _costRatioCache = {};
+async function costRatioForSku(supabase, sku) {
+  if (_costRatioCache[sku] != null) return _costRatioCache[sku];
+  const { data, error } = await supabase.from('OrderLines')
+    .select('LineRevenue,LineCost').eq('ProductCode', sku).not('LineCost', 'is', null).limit(200);
+  let ratio = OVERALL_COST_RATIO;
+  if (!error && data && data.length) {
+    let rev = 0, cost = 0;
+    for (const l of data) { rev += parseFloat(l.LineRevenue || 0); cost += parseFloat(l.LineCost || 0); }
+    if (rev > 0) ratio = cost / rev;
+  }
+  _costRatioCache[sku] = ratio;
+  return ratio;
+}
+
+async function decrementInventory(supabase, cartItems) {
+  for (const { sku, qty } of cartItems) {
+    const { data: inv, error: readErr } = await supabase.from('Inventory').select('StockQty').eq('SKU', sku).maybeSingle();
+    if (readErr) { console.error(`Inventory read error for ${sku}:`, readErr.message); continue; }
+    if (!inv) continue; // untracked SKU — nothing to decrement
+    const newQty = Math.max(0, (inv.StockQty || 0) - qty);
+    const { error: updateErr } = await supabase.from('Inventory')
+      .update({ StockQty: newQty, LastUpdated: new Date().toISOString() })
+      .eq('SKU', sku);
+    if (updateErr) console.error(`Inventory update error for ${sku}:`, updateErr.message);
+  }
 }
 
 function getRawBody(req) {

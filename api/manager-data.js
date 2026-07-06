@@ -60,14 +60,22 @@ async function handler(req, res) {
 
     // ── POST: auto-populate inventory from 2025 sales ────────
     if (req.method === 'POST' && section === 'auto_inventory') {
-      const [linesRes, prodsRes] = await Promise.all([
-        sb.from('OrderLines').select('ProductCode,Quantity')
-          .gte('OrderDate', '2025-01-01').lte('OrderDate', '2025-12-31').limit(100000),
+      // OrderLines has no OrderDate column — join through Orders to find
+      // which lines fall in 2025, then filter the full OrderLines table in
+      // memory (with 15k+ orders, .in(orderIds) would build an unworkably
+      // long query string).
+      const [orders2025, allLines, prodsRes] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID').gte('OrderDate', '2025-01-01').lte('OrderDate', '2025-12-31')),
+        fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity')),
         sb.from('products').select('sku').limit(5000),
       ]);
+      const orderIdSet2025 = new Set(orders2025.map(o => o.OrderID));
+
       const unitsBySku = {};
-      for (const l of (linesRes.data || []))
+      for (const l of allLines) {
+        if (!orderIdSet2025.has(l.OrderID)) continue;
         unitsBySku[l.ProductCode] = (unitsBySku[l.ProductCode] || 0) + (l.Quantity || 0);
+      }
 
       const upserts = [];
       // Products with 2025 sales
@@ -690,8 +698,13 @@ async function handler(req, res) {
       const rentalRevenue = rentals.reduce((s,r)=>s+parseFloat(r.RentalRevenue||0),0);
       const totalRevenue  = salesRevenue + rentalRevenue;
       const cogs          = lines.reduce((s,l)=>s+parseFloat(l.LineCost||0),0);
-      const grossProfit   = salesRevenue - cogs;
-      const grossMargin   = salesRevenue > 0 ? grossProfit/salesRevenue*100 : 0;
+      // Gross margin is a product-level metric: compare COGS to the revenue of
+      // the same lines (LineRevenue), NOT to OrderTotal. OrderTotal bundles in
+      // shipping fees and any orders that have no line detail, which would
+      // otherwise inflate margin (e.g. web orders whose line items are missing).
+      const productRevenue = lines.reduce((s,l)=>s+parseFloat(l.LineRevenue||0),0);
+      const grossProfit   = productRevenue - cogs;
+      const grossMargin   = productRevenue > 0 ? grossProfit/productRevenue*100 : 0;
       const avgOrder      = orders.length ? salesRevenue/orders.length : 0;
 
       // Revenue sacrificed (discounts)
@@ -712,19 +725,20 @@ async function handler(req, res) {
       const prevRevenue = prevYearOrders.reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
       const yoyGrowth   = prevRevenue > 0 ? (salesRevenue - prevRevenue)/prevRevenue*100 : null;
 
-      // Monthly revenue + gross profit
+      // Monthly product revenue + cost (line-based, to keep the Revenue bar,
+      // Gross Profit bar, and margin line all on the same consistent basis).
       const monthlyMap = {};
       for (const o of orders) {
         const m = o.OrderDate.slice(0,7);
         if (!monthlyMap[m]) monthlyMap[m] = { revenue:0, cost:0 };
-        monthlyMap[m].revenue += parseFloat(o.OrderTotal||0);
       }
-      // Distribute costs to months via order dates
       const orderDateMap = {};
       for (const o of orders) orderDateMap[o.OrderID] = o.OrderDate.slice(0,7);
       for (const l of lines) {
         const m = orderDateMap[l.OrderID];
-        if (m && monthlyMap[m]) monthlyMap[m].cost += parseFloat(l.LineCost||0);
+        if (!m || !monthlyMap[m]) continue;
+        monthlyMap[m].revenue += parseFloat(l.LineRevenue||0);
+        monthlyMap[m].cost    += parseFloat(l.LineCost||0);
       }
       const monthly = Object.entries(monthlyMap).sort().map(([month,v])=>({
         month,

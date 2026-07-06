@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rusti Shack — Manager</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg:#FEF9F1; --surface:#ffffff; --surface2:#f5f0e8;
@@ -215,14 +216,8 @@
       <div class="section-header">
         <div class="section-title">Dashboard</div>
         <div style="display:flex;gap:8px;position:relative">
-          <button class="btn-sm" onclick="exportSalesCSV()">&#8595; Download Sales (CSV)</button>
-          <button class="btn-sm" onclick="toggleFullExportMenu()">&#8595; Full Data Export &#9662;</button>
-          <div id="full-export-menu" style="display:none;position:absolute;top:32px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);padding:6px;z-index:50;min-width:170px">
-            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('orders','Orders.csv')">Orders</div>
-            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('orderlines','OrderLines.csv')">OrderLines</div>
-            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('customers_core','Customers_Core.csv')">Customers_Core</div>
-            <div class="btn-sm" style="display:block;width:100%;text-align:left;border:none;border-radius:6px" onclick="exportRawTable('customers_contact','Customers_Contact.csv')">Customers_Contact</div>
-          </div>
+          <button class="btn-sm" onclick="exportSalesCSV()">&#8595; Download Sales (Excel)</button>
+          <button class="btn-sm" id="full-export-btn" onclick="exportAllData()">&#8595; Full Data Export</button>
         </div>
       </div>
       <div id="dash-loading" class="spinner"></div>
@@ -282,7 +277,7 @@
     <div class="section" id="sec-orders">
       <div class="section-header">
         <div class="section-title">Orders</div>
-        <button class="btn-sm" onclick="exportCSV('orders')">&#8595; Export CSV</button>
+        <button class="btn-sm" onclick="exportCSV('orders')">&#8595; Export Excel</button>
       </div>
       <div id="orders-loading" class="spinner"></div>
       <div id="orders-content" style="display:none">
@@ -310,7 +305,7 @@
     <div class="section" id="sec-customers">
       <div class="section-header">
         <div class="section-title">Customers</div>
-        <button class="btn-sm" onclick="exportCSV('customers')">&#8595; Export CSV</button>
+        <button class="btn-sm" onclick="exportCSV('customers')">&#8595; Export Excel</button>
       </div>
       <div id="customers-loading" class="spinner"></div>
       <div id="customers-content" style="display:none">
@@ -360,7 +355,7 @@
     <div class="section" id="sec-products">
       <div class="section-header">
         <div class="section-title">Products</div>
-        <button class="btn-sm" onclick="exportCSV('products')">&#8595; Export CSV</button>
+        <button class="btn-sm" onclick="exportCSV('products')">&#8595; Export Excel</button>
       </div>
       <div id="products-loading" class="spinner"></div>
       <div id="products-content" style="display:none">
@@ -721,14 +716,14 @@ async function loadWeekSummary() {
   } catch (e) { /* non-critical */ }
 }
 
-// ── CSV downloads: sales export + full data export ────────────────
-function toCSVAndDownload(header, dataRows, filename) {
-  const rows = [header, ...dataRows];
-  const csv = rows.map(r => r.map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = filename;
-  a.click();
+// ── Excel downloads: sales export + full data export ──────────────
+// Real .xlsx files (via SheetJS) rather than .csv — on Mac, .csv opens in
+// Numbers by default even with Excel installed, while .xlsx opens in Excel.
+function toXLSXAndDownload(header, dataRows, filename, sheetName) {
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName || 'Sheet1');
+  XLSX.writeFile(wb, filename);
 }
 
 async function exportSalesCSV() {
@@ -736,7 +731,7 @@ async function exportSalesCSV() {
     const d = await api({ section: 'export_sales' });
     const header = ['OrderID','OrderDate','FirstName','LastName','Country','ProductCode','ProductName','Quantity','UnitPrice','LineRevenue','ShippingFee','OrderTotal','PaymentMethod'];
     const rows = (d.rows || []).map(r => header.map(h => r[h]));
-    toCSVAndDownload(header, rows, 'rusti-shack-sales.csv');
+    toXLSXAndDownload(header, rows, 'rusti-shack-sales.xlsx', 'Sales');
   } catch (e) { alert('Export failed: ' + e.message); }
 }
 
@@ -747,26 +742,30 @@ const RAW_TABLE_COLUMNS = {
   customers_contact: ['CustomerID','Email','Phone','LoyaltyMember','StreetAddress','Region','PostalCode'],
 };
 
-async function exportRawTable(table, filename) {
+// Full data export — all four tables as separate tabs in ONE workbook.
+async function exportAllData() {
+  const btn = document.getElementById('full-export-btn');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
   try {
-    const d = await api({ section: 'export_raw', table });
-    const header = RAW_TABLE_COLUMNS[table];
-    const rows = (d.rows || []).map(r => header.map(h => r[h]));
-    toCSVAndDownload(header, rows, filename);
+    const tables = [
+      { table: 'orders',            sheet: 'Orders' },
+      { table: 'orderlines',        sheet: 'OrderLines' },
+      { table: 'customers_core',    sheet: 'Customers_Core' },
+      { table: 'customers_contact', sheet: 'Customers_Contact' },
+    ];
+    const results = await Promise.all(tables.map(t => api({ section: 'export_raw', table: t.table })));
+    const wb = XLSX.utils.book_new();
+    tables.forEach((t, i) => {
+      const header = RAW_TABLE_COLUMNS[t.table];
+      const rows = (results[i].rows || []).map(r => header.map(h => r[h]));
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+      XLSX.utils.book_append_sheet(wb, ws, t.sheet);
+    });
+    XLSX.writeFile(wb, 'rusti-shack-all-data.xlsx');
   } catch (e) { alert('Export failed: ' + e.message); }
-  document.getElementById('full-export-menu').style.display = 'none';
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = label; } }
 }
-
-function toggleFullExportMenu() {
-  const el = document.getElementById('full-export-menu');
-  el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-document.addEventListener('click', function (e) {
-  const menu = document.getElementById('full-export-menu');
-  if (menu && menu.style.display === 'block' && !menu.contains(e.target) && e.target.textContent.indexOf('Full Data Export') === -1) {
-    menu.style.display = 'none';
-  }
-});
 
 function pct(cur, prev) {
   if (!+prev) return '';
@@ -777,13 +776,16 @@ function pct(cur, prev) {
 function renderDashboard(d) {
   hide('dash-loading'); show('dash-content');
 
-  // Annual target
+  // Sales target — tracks whichever period is currently selected up top
   const target = +localStorage.getItem('mgr_annual_target') || 500000;
-  const currentYearRev = d.yoyData ? +d.yoyData.currentYTD : +d.totalRevenue;
-  const pctFill = Math.min(100, (currentYearRev / target * 100)).toFixed(1);
+  const periodRev = +d.totalRevenue;
+  const pctFill = Math.min(100, (periodRev / target * 100)).toFixed(1);
   document.getElementById('target-fill').style.width = pctFill + '%';
-  document.getElementById('target-current').textContent = '$' + fmt(currentYearRev) + ' (' + pctFill + '%)';
+  document.getElementById('target-current').textContent = '$' + fmt(periodRev) + ' (' + pctFill + '%)';
   document.getElementById('target-goal').textContent = 'Target: $' + fmt(target);
+  const activeYearBtn = document.querySelector('#year-filter .date-btn.active');
+  const targetLabel = activeYearBtn && activeYearBtn.dataset.year !== '0' ? activeYearBtn.dataset.year : 'All-Time';
+  document.querySelector('.target-bar-title').textContent = targetLabel + ' Sales Target';
 
   // KPIs
   const totalAll = +d.totalRevenue + +d.rentalRevenue;
@@ -1310,7 +1312,6 @@ async function loadFinancials() {
       <div class="kpi" style="--accent:var(--teal)"><div class="kpi-label">Gross Profit</div><div class="kpi-value">$${fmt(d.grossProfit)}</div><div class="kpi-sub">${gm.toFixed(1)}% margin</div></div>
       <div class="kpi gold"><div class="kpi-label">Avg Order Value</div><div class="kpi-value">$${fmt(d.avgOrder)}</div></div>
       <div class="kpi"><div class="kpi-label">Revenue / Customer</div><div class="kpi-value">$${fmt(d.revenuePerCustomer)}</div><div class="kpi-sub">Active customers</div></div>
-      <div class="kpi coral"><div class="kpi-label">Rev. Sacrificed</div><div class="kpi-value">$${fmt(d.totalSacrificed)}</div><div class="kpi-sub">Total promo discounts</div></div>
     `;
 
     const months = (d.monthly||[]).map(r=>r.month);
@@ -1379,22 +1380,22 @@ function sortTable(key, col, type) {
   if (key==='promo')  { _promosData.sort(cmp);     renderPromosTable(); }
 }
 
-// ── CSV ─────────────────────────────────────────────────────────────
+// ── Excel export ────────────────────────────────────────────────────
 function exportCSV(section) {
-  let rows, filename;
+  let rows, filename, sheetName;
   if (section==='orders') {
     rows=[['OrderID','Date','Customer','Country','Channel','Total'],
-      ..._ordersFiltered.map(o=>[o.OrderID,o.OrderDate,o.customerName,o.country,o.Channel,o.OrderTotal])]; filename='orders.csv';
+      ..._ordersFiltered.map(o=>[o.OrderID,o.OrderDate,o.customerName,o.country,o.Channel,o.OrderTotal])]; filename='orders.xlsx'; sheetName='Orders';
   } else if (section==='customers') {
     rows=[['ID','Name','Country','Type','Loyalty','Orders','LTV','LastOrder'],
-      ..._custsFiltered.map(c=>[c.CustomerID,c.FirstName+' '+c.LastName,c.Country,c.CustomerType,c.loyalty?'Yes':'No',c.orderCount,c.lifetimeValue,c.lastOrder])]; filename='customers.csv';
+      ..._custsFiltered.map(c=>[c.CustomerID,c.FirstName+' '+c.LastName,c.Country,c.CustomerType,c.loyalty?'Yes':'No',c.orderCount,c.lifetimeValue,c.lastOrder])]; filename='customers.xlsx'; sheetName='Customers';
   } else if (section==='products') {
     rows=[['SKU','Name','Category','Units','Revenue','Margin%'],
-      ..._prodsFiltered.map(p=>[p.sku,p.name,p.category,p.units,p.revenue,p.margin])]; filename='products.csv';
+      ..._prodsFiltered.map(p=>[p.sku,p.name,p.category,p.units,p.revenue,p.margin])]; filename='products.xlsx'; sheetName='Products';
   }
   if (!rows) return;
-  const csv=rows.map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')).join('\n');
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=filename; a.click();
+  const [header, ...dataRows] = rows;
+  toXLSXAndDownload(header, dataRows, filename, sheetName);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
