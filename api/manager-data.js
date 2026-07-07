@@ -963,15 +963,27 @@ async function handler(req, res) {
         else                              { revenueNoPromo   += parseFloat(o.OrderTotal||0); ordersNoPromo++;   }
       }
 
-      const promos = promosData.map(p=>({
-        ...p,
-        orderCount: orderCounts[p.PromoCode]||0,
-        revenue:    +((promoRevenue[p.PromoCode]||0).toFixed(2)),
-        sacrificed: +((promoSacrificed[p.PromoCode]||0).toFixed(2)),
-        avgOrder:   orderCounts[p.PromoCode]
-          ? +((promoRevenue[p.PromoCode]||0) / orderCounts[p.PromoCode]).toFixed(2)
-          : 0,
-      })).sort((a,b)=>b.orderCount-a.orderCount);
+      const promos = promosData.map(p=>{
+        const orderCount = orderCounts[p.PromoCode]||0;
+        const revenue    = +((promoRevenue[p.PromoCode]||0).toFixed(2));
+        const sacrificed = +((promoSacrificed[p.PromoCode]||0).toFixed(2));
+        const disc       = parseFloat(p.DiscountPct||0);
+        // Line-level discount is the source of truth; but some promos (e.g.
+        // loyalty codes) carry a DiscountPct that was never written to the
+        // order lines, so sacrificed reads 0. Fall back to estimating the
+        // discount from the percentage so ROI is still meaningful. Free-
+        // shipping promos have no product discount at all.
+        let discountGiven = sacrificed, discountBasis = 'line';
+        if (sacrificed <= 0) {
+          if (disc > 0 && disc < 100) { discountGiven = +((revenue * disc / (100 - disc)).toFixed(2)); discountBasis = 'estimated'; }
+          else if ((p.PromoType||'').toLowerCase() === 'shipping') { discountBasis = 'shipping'; }
+          else { discountBasis = 'none'; }
+        }
+        return {
+          ...p, orderCount, revenue, sacrificed, discountGiven, discountBasis,
+          avgOrder: orderCount ? +((promoRevenue[p.PromoCode]||0) / orderCount).toFixed(2) : 0,
+        };
+      }).sort((a,b)=>b.orderCount-a.orderCount);
 
       return res.json({
         promos,

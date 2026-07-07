@@ -341,6 +341,9 @@
               <button class="btn-sm" id="orders-prev" onclick="changeOrdersPage(-1)">&#8592; Prev</button>
               <span id="orders-pageinfo" style="color:var(--muted)"></span>
               <button class="btn-sm" id="orders-next" onclick="changeOrdersPage(1)">Next &#8594;</button>
+              <span style="color:var(--muted);margin-left:8px">Go to</span>
+              <input class="inv-input" id="orders-page-input" type="number" min="1" style="width:64px" onkeydown="if(event.key==='Enter')gotoOrdersPage()">
+              <button class="btn-sm" onclick="gotoOrdersPage()">Go</button>
             </div>
           </div>
         </div>
@@ -461,21 +464,24 @@
           </div>
         </div>
 
-        <!-- Reorder schedule / PO calendar -->
+        <!-- Reorder schedule / PO calendar (collapsible) -->
         <div class="table-card">
-          <div class="table-toolbar">
+          <div class="table-toolbar" style="cursor:pointer" onclick="toggleReorderSched()">
+            <span id="reorder-sched-caret" style="color:var(--muted);width:14px;display:inline-block">&#9662;</span>
             <h3>Reorder Schedule &mdash; What to Order &amp; When</h3>
             <div class="spacer"></div>
             <span id="reorder-sched-note" style="font-size:12px;color:var(--muted)"></span>
           </div>
-          <table><thead><tr>
-            <th>Order By</th><th>SKU</th><th>Item</th><th>In Stock</th>
-            <th>Forecast / mo</th><th>Days Left</th><th>Order Qty</th>
-          </tr></thead>
-          <tbody id="reorder-sched-body"></tbody></table>
+          <div id="reorder-sched-wrap">
+            <table><thead><tr>
+              <th>Order By</th><th>SKU</th><th>Item</th><th>In Stock</th>
+              <th>Forecast / mo</th><th>Days Left</th><th>Order Qty</th>
+            </tr></thead>
+            <tbody id="reorder-sched-body"></tbody></table>
+          </div>
         </div>
 
-        <div class="table-card">
+        <div class="table-card" id="inv-table-card">
           <div class="table-toolbar">
             <h3 id="inv-count"></h3>
             <button class="btn-sm" id="reorder-filter-btn" onclick="toggleReorderOnly()">&#9873; Show reorder list</button>
@@ -703,16 +709,6 @@
           The store doesn't record wages, so enter each person's hourly pay and typical hours per week below —
           labor cost and revenue-per-labor-dollar update as you type. Wages are saved on this device only.</span>
         </div>
-        <div class="chart-row cols-2">
-          <div class="chart-card">
-            <h3>Revenue by Employee</h3>
-            <div class="chart-wrap"><canvas id="chartEmpRev"></canvas></div>
-          </div>
-          <div class="chart-card">
-            <h3>Revenue per Labor Dollar</h3>
-            <div class="chart-wrap"><canvas id="chartEmpProd"></canvas></div>
-          </div>
-        </div>
         <div class="table-card">
           <div class="table-toolbar"><h3 id="emp-count"></h3></div>
           <table><thead><tr>
@@ -729,6 +725,25 @@
             <th>Rev / Labor $</th>
           </tr></thead>
           <tbody id="emp-body"></tbody></table>
+        </div>
+
+        <!-- Weekly schedule -->
+        <div class="table-card">
+          <div class="table-toolbar">
+            <h3>Weekly Schedule</h3>
+            <div class="spacer"></div>
+            <button class="btn-sm" onclick="schedWeek(-1)">&#8592;</button>
+            <span id="sched-week-label" style="font-weight:600;min-width:170px;text-align:center"></span>
+            <button class="btn-sm" onclick="schedWeek(1)">&#8594;</button>
+            <button class="btn-sm" onclick="schedThisWeek()" style="margin-left:8px">This week</button>
+          </div>
+          <div style="overflow-x:auto"><table id="sched-table">
+            <thead><tr id="sched-head"></tr></thead>
+            <tbody id="sched-body"></tbody>
+          </table></div>
+          <div style="font-size:11px;color:var(--muted2);padding:10px 16px">
+            Type each shift (e.g. "9–5" or "OFF"). A sample rotation is prefilled; your edits save on this device per week.
+          </div>
         </div>
       </div>
     </div>
@@ -1235,6 +1250,16 @@ function changeOrdersPage(delta) {
   renderOrdersTable();
   document.querySelector('.main').scrollTop = 0;
 }
+function gotoOrdersPage() {
+  const pageCount = Math.max(1, Math.ceil(_ordersFiltered.length / ORDERS_PER_PAGE));
+  const el = document.getElementById('orders-page-input');
+  const n = parseInt(el.value, 10);
+  if (!n || n < 1) return;
+  _ordersPage = Math.min(pageCount - 1, n - 1);
+  el.value = '';
+  renderOrdersTable();
+  document.querySelector('.main').scrollTop = 0;
+}
 
 function renderOrdersTable() {
   const total = _ordersFiltered.length;
@@ -1453,21 +1478,68 @@ function renderEmployees() {
     </tr>`;
   }).join('');
 
-  // Charts: revenue by employee, and revenue per labor dollar (people only)
-  mkChart('chartEmpRev', {
-    type:'bar',
-    data:{ labels:_empData.employees.map(e=>e.id), datasets:[
-      { label:'Sales', data:_empData.employees.map(e=>e.salesRevenue), backgroundColor:'#00B4A0', borderRadius:3 },
-      { label:'Rentals', data:_empData.employees.map(e=>e.rentalRevenue), backgroundColor:'#1A7A9E', borderRadius:3 },
-    ]},
-    options:{ ...baseOpts(), scales:{ x:{ stacked:true, ticks:{color:'#6b7a8d'}, grid:{display:false} }, y:{ stacked:true, ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} } } }
-  });
-  const prodPeople = people.map(e => ({ id:e.id, v:empLabor(e).revPerLabor || 0 }));
-  mkChart('chartEmpProd', {
-    type:'bar',
-    data:{ labels:prodPeople.map(p=>p.id), datasets:[{ label:'Revenue per labor $', data:prodPeople.map(p=>p.v), backgroundColor:'#D99A2A', borderRadius:4 }]},
-    options:{ ...baseOpts(), scales:{ x:{ticks:{color:'#6b7a8d'},grid:{display:false}}, y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}} }, plugins:{ ...baseOpts().plugins, legend:{display:false} } }
-  });
+  renderSchedule();
+}
+
+// ── Weekly staff schedule ───────────────────────────────────────────
+let _schedOffset = 0; // 0 = current week
+const SCHED_DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+// Sample rotation applied to any week with no saved edits (store open daily).
+const SCHED_SAMPLE = [
+  ['OFF','9–5','9–5','9–5','9–5','OFF','10–6'],
+  ['10–6','OFF','12–8','9–5','OFF','9–5','9–5'],
+  ['9–5','12–8','OFF','OFF','9–5','12–8','9–5'],
+  ['12–8','9–5','9–5','12–8','12–8','OFF','OFF'],
+  ['OFF','OFF','9–5','9–5','9–5','12–8','12–8'],
+  ['9–5','12–8','12–8','OFF','OFF','9–5','10–6'],
+  ['12–8','9–5','OFF','12–8','12–8','12–8','OFF'],
+];
+
+function weekStartFor(offset) {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - d.getDay() + offset * 7); // back to Sunday, then shift weeks
+  return d;
+}
+function schedKey(weekStart) { return 'mgr_sched_' + weekStart.toISOString().slice(0,10); }
+function getSavedSched(weekStart) { try { return JSON.parse(localStorage.getItem(schedKey(weekStart)) || 'null'); } catch { return null; } }
+function saveSchedCell(weekStart, empId, dayIdx, val) {
+  const key = schedKey(weekStart);
+  const cur = getSavedSched(weekStart) || {};
+  cur[empId] = cur[empId] || Array(7).fill('');
+  cur[empId][dayIdx] = val;
+  localStorage.setItem(key, JSON.stringify(cur));
+}
+function schedWeek(delta) { _schedOffset += delta; renderSchedule(); }
+function schedThisWeek() { _schedOffset = 0; renderSchedule(); }
+
+function renderSchedule() {
+  if (!_empData) return;
+  const people = _empData.employees.filter(e => !e.isWeb);
+  const weekStart = weekStartFor(_schedOffset);
+  const saved = getSavedSched(weekStart) || {};
+
+  // Header: Employee + the seven dated days
+  const fmtDay = i => { const d = new Date(weekStart); d.setDate(d.getDate()+i); return SCHED_DAYS[i] + '<br><span style="font-weight:400;color:var(--muted2)">' + (d.getMonth()+1) + '/' + d.getDate() + '</span>'; };
+  document.getElementById('sched-head').innerHTML =
+    '<th>Employee</th>' + SCHED_DAYS.map((_,i)=>`<th style="text-align:center">${fmtDay(i)}</th>`).join('');
+
+  const end = new Date(weekStart); end.setDate(end.getDate()+6);
+  const opt = { month:'short', day:'numeric' };
+  document.getElementById('sched-week-label').textContent =
+    weekStart.toLocaleDateString('en-US',opt) + ' – ' + end.toLocaleDateString('en-US',{...opt, year:'numeric'});
+
+  document.getElementById('sched-body').innerHTML = people.map((e, ei) => {
+    const cells = SCHED_DAYS.map((_, di) => {
+      const val = (saved[e.id] && saved[e.id][di] != null && saved[e.id][di] !== '')
+        ? saved[e.id][di]
+        : SCHED_SAMPLE[ei % SCHED_SAMPLE.length][di];
+      const off = /^off$/i.test(val);
+      return `<td style="text-align:center;padding:4px"><input class="inv-input" style="width:70px;text-align:center;${off?'color:var(--muted2)':''}" value="${val}"
+        onchange="saveSchedCell(weekStartFor(_schedOffset),'${e.id}',${di},this.value)"></td>`;
+    }).join('');
+    return `<tr><td><strong>${e.id}</strong></td>${cells}</tr>`;
+  }).join('');
 }
 
 // ── Products ────────────────────────────────────────────────────────
@@ -1517,6 +1589,13 @@ async function loadInventory() {
   } catch (e) { document.getElementById('inventory-loading').innerHTML = err(e); }
 }
 
+let _reorderSchedCollapsed = true;
+function toggleReorderSched() {
+  _reorderSchedCollapsed = !_reorderSchedCollapsed;
+  document.getElementById('reorder-sched-wrap').style.display = _reorderSchedCollapsed ? 'none' : '';
+  document.getElementById('reorder-sched-caret').innerHTML = _reorderSchedCollapsed ? '&#9656;' : '&#9662;';
+}
+
 // Turns reorder points into a concrete "order this, by this date" list. Days
 // left = how long current stock lasts before hitting the reorder point at the
 // forecast sales rate; order-by date follows from that.
@@ -1538,7 +1617,11 @@ function renderReorderSchedule() {
     .sort((a, b) => a.daysLeft - b.daysLeft || b.forecastUnits - a.forecastUnits);
 
   document.getElementById('reorder-sched-note').textContent =
-    rows.length ? rows.length + ' item' + (rows.length!==1?'s':'') + ' to order within ' + HORIZON + ' days' : '';
+    (rows.length ? rows.length + ' item' + (rows.length!==1?'s':'') + ' to order within ' + HORIZON + ' days' : 'Nothing to order soon')
+    + (_reorderSchedCollapsed ? ' · click to expand' : '');
+  // Apply collapsed state
+  document.getElementById('reorder-sched-wrap').style.display = _reorderSchedCollapsed ? 'none' : '';
+  document.getElementById('reorder-sched-caret').innerHTML = _reorderSchedCollapsed ? '&#9656;' : '&#9662;';
   const body = document.getElementById('reorder-sched-body');
   if (!rows.length) {
     body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Nothing needs ordering in the next ${HORIZON} days.</td></tr>`;
@@ -1597,7 +1680,7 @@ function toggleReorderOnly() {
 }
 function showReorderList() {
   if (!_invReorderOnly) toggleReorderOnly();
-  document.querySelector('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('inv-table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderTopDemandChart(top) {
@@ -1775,11 +1858,12 @@ async function loadPromos() {
     });
 
     // ROI KPIs
+    const discOf = p => (p.discountGiven != null ? p.discountGiven : p.sacrificed);
     const used = _promosData.filter(p => p.orderCount > 0);
     const totalRev = used.reduce((s,p)=>s+p.revenue,0);
-    const totalDisc = used.reduce((s,p)=>s+p.sacrificed,0);
+    const totalDisc = used.reduce((s,p)=>s+discOf(p),0);
     const overallROI = totalDisc > 0 ? totalRev/totalDisc : 0;
-    const withROI = used.filter(p=>p.sacrificed>0).map(p=>({...p, roi:p.revenue/p.sacrificed})).sort((a,b)=>b.roi-a.roi);
+    const withROI = used.filter(p=>discOf(p)>0).map(p=>({...p, roi:p.revenue/discOf(p)})).sort((a,b)=>b.roi-a.roi);
     const best = withROI[0], worst = withROI[withROI.length-1];
     document.getElementById('promo-kpis').innerHTML = `
       <div class="kpi"><div class="kpi-label">Active Promos</div><div class="kpi-value">${used.length}</div><div class="kpi-sub">with orders</div></div>
@@ -1794,12 +1878,14 @@ async function loadPromos() {
 }
 
 function promoROI(p) {
-  if (!(p.sacrificed > 0)) return null;
-  return p.revenue / p.sacrificed;
+  const disc = p.discountGiven != null ? p.discountGiven : p.sacrificed;
+  if (!(disc > 0)) return null;
+  return p.revenue / disc;
 }
-function promoVerdict(roi, orderCount) {
+function promoVerdict(p, roi) {
+  if (p.discountBasis === 'shipping') return '<span class="badge badge-grey">Free shipping</span>';
   if (roi == null) return '<span class="badge badge-grey">No discount</span>';
-  if (orderCount < 5) return '<span class="badge badge-grey">Too few</span>';
+  if (p.orderCount < 5) return '<span class="badge badge-grey">Too few</span>';
   if (roi >= 8) return '<span class="badge badge-teal">Repeat</span>';
   if (roi >= 4) return '<span class="badge badge-gold">OK</span>';
   return '<span class="badge badge-coral">Review</span>';
@@ -1809,6 +1895,9 @@ function renderPromosTable() {
   document.getElementById('promos-body').innerHTML = _promosData.map(p => {
     const roi = promoROI(p);
     const roiColor = roi == null ? 'var(--muted)' : roi >= 8 ? 'var(--teal)' : roi >= 4 ? 'var(--gold)' : 'var(--coral)';
+    const disc = p.discountGiven != null ? p.discountGiven : p.sacrificed;
+    const discCell = (p.discountBasis === 'shipping') ? '—'
+      : '$' + fmt(disc) + (p.discountBasis === 'estimated' ? '<span style="font-size:10px;color:var(--muted)"> est.</span>' : '');
     return `<tr>
       <td><span style="color:var(--teal);font-family:monospace">${p.PromoCode}</span></td>
       <td>${p.PromoName||'—'}</td><td>${p.PromoType||'—'}</td>
@@ -1816,9 +1905,9 @@ function renderPromosTable() {
       <td>${p.StartDate||'—'}</td><td>${p.EndDate||'—'}</td>
       <td>${p.Channel||'All'}</td>
       <td><strong>${p.orderCount}</strong></td>
-      <td>$${fmt(p.sacrificed)}</td>
+      <td>${discCell}</td>
       <td style="color:${roiColor};font-weight:600">${roi==null?'—':'$'+roi.toFixed(1)}</td>
-      <td>${promoVerdict(roi, p.orderCount)}</td>
+      <td>${promoVerdict(p, roi)}</td>
     </tr>`;
   }).join('');
 }
@@ -2113,7 +2202,7 @@ function sortTable(key, col, type) {
     if (key==='cust')   return [item.CustomerID,item.FirstName+' '+item.LastName,item.Country,item.CustomerType,item.loyalty?'Yes':'No',item.orderCount,parseFloat(item.lifetimeValue),item.lastOrder][col];
     if (key==='prod')   return [item.sku,item.name,item.category,item.units,item.revenue,item.margin][col];
     if (key==='inv')    return [item.sku,item.name,item.category,item.forecastUnits??-1,item.stockQty??-1,item.reorderLevel??-1,item.suggestedStock??-1,item.status][col];
-    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.sacrificed),parseFloat(item.avgOrder),(item.sacrificed>0?item.revenue/item.sacrificed:0)][col];
+    if (key==='promo')  { const dg=(item.discountGiven!=null?item.discountGiven:item.sacrificed); return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(dg),parseFloat(item.avgOrder),(dg>0?item.revenue/dg:0)][col]; }
     return '';
   }
   const cmp = (a,b) => {
