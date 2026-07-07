@@ -396,26 +396,34 @@ async function handler(req, res) {
 
     // ── Forecast: historicals + 3 statistical models ──────────
     if (section === 'forecast') {
-      // Always uses full history (ignores the top-bar year filter).
+      // Which slice of the business to forecast (ignores the top-bar year filter).
+      //   all | shipping | instore | rental
+      const segment = ['all', 'shipping', 'instore', 'rental'].includes(req.query.segment) ? req.query.segment : 'all';
+      const includeOrders  = segment !== 'rental';
+      const includeRentals = segment === 'all' || segment === 'rental';
+      const channelOk = ch => segment === 'all' || (segment === 'shipping' && ch === 'Shipping') || (segment === 'instore' && ch === 'In-Store');
+
       const [orders, rentals, lines] = await Promise.all([
-        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate,OrderTotal')),
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate,OrderTotal,Channel')),
         fetchAll(() => sb.from('RentalTransactions').select('RentalDate,RentalRevenue')),
         fetchAll(() => sb.from('OrderLines').select('OrderID,LineRevenue,LineCost')),
       ]);
 
-      const salesByMonth = {}, rentByMonth = {}, orderMonth = {};
+      const salesByMonth = {}, rentByMonth = {}, orderMonth = {}, orderChannel = {};
       for (const o of orders) {
         const m = o.OrderDate.slice(0, 7);
-        salesByMonth[m] = (salesByMonth[m] || 0) + parseFloat(o.OrderTotal || 0);
         orderMonth[o.OrderID] = m;
+        orderChannel[o.OrderID] = o.Channel;
+        if (includeOrders && channelOk(o.Channel)) salesByMonth[m] = (salesByMonth[m] || 0) + parseFloat(o.OrderTotal || 0);
       }
-      for (const r of rentals) {
+      if (includeRentals) for (const r of rentals) {
         const m = (r.RentalDate || '').slice(0, 7);
         if (m) rentByMonth[m] = (rentByMonth[m] || 0) + parseFloat(r.RentalRevenue || 0);
       }
+      // Gross margin only applies to product sales, not rentals.
       const lineRevByMonth = {}, lineCostByMonth = {};
-      for (const l of lines) {
-        const m = orderMonth[l.OrderID]; if (!m) continue;
+      if (segment !== 'rental') for (const l of lines) {
+        const m = orderMonth[l.OrderID]; if (!m || !channelOk(orderChannel[l.OrderID])) continue;
         lineRevByMonth[m]  = (lineRevByMonth[m]  || 0) + parseFloat(l.LineRevenue || 0);
         lineCostByMonth[m] = (lineCostByMonth[m] || 0) + parseFloat(l.LineCost || 0);
       }
@@ -492,8 +500,16 @@ async function handler(req, res) {
         build('Ensemble Blend', 'ensemble',    ensemble),
       ];
 
+      const SEGMENT_LABELS = {
+        all:      'Total revenue (sales + rentals)',
+        shipping: 'Shipping (online) sales',
+        instore:  'In-store sales',
+        rental:   'Rental revenue',
+      };
       return res.json({
-        target: 'Total monthly revenue (sales + rentals)',
+        segment, segmentLabel: SEGMENT_LABELS[segment],
+        hasMargin: segment !== 'rental',
+        target: SEGMENT_LABELS[segment],
         history, lastMonth, horizonMax: FC_HMAX, models,
       });
     }
@@ -747,10 +763,15 @@ async function handler(req, res) {
       const countryDist = Object.entries(countryMap).sort((a,b)=>b[1]-a[1]).slice(0,12)
         .map(([country,count])=>({country,count}));
 
+      const loyaltyTotal = customers.filter(c => c.loyalty).length;
       return res.json({
         customers,
         loyaltyAvgLTV:   avgLTV(loyaltyOrders).toFixed(2),
         noLoyaltyAvgLTV: avgLTV(noLoyaltyOrders).toFixed(2),
+        // Counts over ALL customers so loyalty + non-loyalty = total.
+        loyaltyTotal,
+        nonLoyaltyTotal: customers.length - loyaltyTotal,
+        // Counts limited to customers who have ordered (the LTV denominator).
         loyaltyCount:    loyaltyOrders.length,
         noLoyaltyCount:  noLoyaltyOrders.length,
         newByMonth: Object.entries(monthMap).map(([month,count])=>({month,count})),
