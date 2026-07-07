@@ -561,17 +561,11 @@
       <div id="forecast-loading" class="spinner"></div>
       <div id="forecast-content" style="display:none">
 
-        <!-- Historicals -->
+        <!-- Historical revenue -->
         <div class="chart-row cols-1">
           <div class="chart-card">
             <h3>Historical Revenue — Monthly (Sales + Rentals)</h3>
             <div class="chart-wrap tall"><canvas id="chartHistRev"></canvas></div>
-          </div>
-        </div>
-        <div class="chart-row cols-1">
-          <div class="chart-card">
-            <h3>Historical Gross Margin — Monthly</h3>
-            <div class="chart-wrap"><canvas id="chartHistMargin"></canvas></div>
           </div>
         </div>
 
@@ -599,6 +593,14 @@
           <div style="font-size:11px;color:var(--muted2);margin-top:10px">
             Solid line is actual history; dashed line is the forecast. The darker band is the 80% likely range and the
             lighter band the 95% range — both widen the further out you look, because the future gets less certain.
+          </div>
+        </div>
+
+        <!-- Historical gross margin -->
+        <div class="chart-row cols-1">
+          <div class="chart-card">
+            <h3>Historical Gross Margin — Monthly</h3>
+            <div class="chart-wrap"><canvas id="chartHistMargin"></canvas></div>
           </div>
         </div>
 
@@ -858,16 +860,17 @@ function pct(cur, prev) {
 function renderDashboard(d) {
   hide('dash-loading'); show('dash-content');
 
-  // Sales target — tracks whichever period is currently selected up top
-  const target = +localStorage.getItem('mgr_annual_target') || 500000;
+  // Sales target — a separate goal per year (and All-Time), tracking whichever
+  // period is currently selected up top.
+  const year = currentTargetYear();
+  const target = getTargetForYear(year);
   const periodRev = +d.totalRevenue;
   const pctFill = Math.min(100, (periodRev / target * 100)).toFixed(1);
   document.getElementById('target-fill').style.width = pctFill + '%';
   document.getElementById('target-current').textContent = '$' + fmt(periodRev) + ' (' + pctFill + '%)';
   document.getElementById('target-goal').textContent = 'Target: $' + fmt(target);
-  const activeYearBtn = document.querySelector('#year-filter .date-btn.active');
-  const targetLabel = activeYearBtn && activeYearBtn.dataset.year !== '0' ? activeYearBtn.dataset.year : 'All-Time';
-  document.querySelector('.target-bar-title').textContent = targetLabel + ' Sales Target';
+  document.querySelector('.target-bar-title').textContent =
+    (year === '0' ? 'All-Time' : year) + ' Sales Target';
 
   // KPIs
   const totalAll = +d.totalRevenue + +d.rentalRevenue;
@@ -988,11 +991,30 @@ function renderRecentOrders(orders) {
   `).join('');
 }
 
+// Per-year sales targets, keyed by year ('0' = All-Time), stored as one JSON
+// map. Falls back to any older single-value target, then to a default.
+function getTargets() {
+  try { return JSON.parse(localStorage.getItem('mgr_targets') || '{}'); } catch { return {}; }
+}
+function currentTargetYear() {
+  const btn = document.querySelector('#year-filter .date-btn.active');
+  return btn ? btn.dataset.year : '0';
+}
+function getTargetForYear(year) {
+  const t = getTargets();
+  if (t[year] != null) return +t[year];
+  const legacy = +localStorage.getItem('mgr_annual_target');
+  return legacy || 500000;
+}
 function editTarget() {
-  const cur = +localStorage.getItem('mgr_annual_target') || 500000;
-  const val = prompt('Set annual sales target ($):', cur);
+  const year = currentTargetYear();
+  const label = year === '0' ? 'all-time' : year;
+  const cur = getTargetForYear(year);
+  const val = prompt('Set the sales target for ' + label + ' ($):', cur);
   if (val && !isNaN(+val)) {
-    localStorage.setItem('mgr_annual_target', +val);
+    const t = getTargets();
+    t[year] = +val;
+    localStorage.setItem('mgr_targets', JSON.stringify(t));
     if (_dashData) renderDashboard(_dashData);
   }
 }
