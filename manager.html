@@ -236,6 +236,7 @@
     <div class="nav-section">Operations</div>
     <div class="nav-item" data-section="orders"><span class="icon">&#9679;</span> Orders</div>
     <div class="nav-item" data-section="customers"><span class="icon">&#9679;</span> Customers</div>
+    <div class="nav-item" data-section="employees"><span class="icon">&#9679;</span> Employees</div>
     <div class="nav-section">Catalog</div>
     <div class="nav-item" data-section="products"><span class="icon">&#9679;</span> Products</div>
     <div class="nav-item" data-section="inventory"><span class="icon">&#9679;</span> Inventory</div>
@@ -460,6 +461,20 @@
           </div>
         </div>
 
+        <!-- Reorder schedule / PO calendar -->
+        <div class="table-card">
+          <div class="table-toolbar">
+            <h3>Reorder Schedule &mdash; What to Order &amp; When</h3>
+            <div class="spacer"></div>
+            <span id="reorder-sched-note" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <table><thead><tr>
+            <th>Order By</th><th>SKU</th><th>Item</th><th>In Stock</th>
+            <th>Forecast / mo</th><th>Days Left</th><th>Order Qty</th>
+          </tr></thead>
+          <tbody id="reorder-sched-body"></tbody></table>
+        </div>
+
         <div class="table-card">
           <div class="table-toolbar">
             <h3 id="inv-count"></h3>
@@ -511,6 +526,26 @@
             <div class="chart-wrap"><canvas id="chartTopRentals"></canvas></div>
           </div>
         </div>
+
+        <!-- Fleet utilization -->
+        <div class="chart-row cols-1">
+          <div class="chart-card">
+            <h3 id="fleet-util-title">Fleet Utilization — Hardest-Working Gear</h3>
+            <div class="chart-wrap tall"><canvas id="chartFleetUtil"></canvas></div>
+            <div style="font-size:11px;color:var(--muted2);margin-top:10px">
+              "Units out per day" is the average number of units of that item rented out on any given day over the
+              period — the best signal of how hard each item works. Use it to spot gear worth buying more of (or less).
+            </div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><h3>Fleet Detail</h3></div>
+          <table><thead><tr>
+            <th>SKU</th><th>Item</th><th>Rentals</th><th>Unit-Days</th>
+            <th>Avg Length</th><th>Units Out / Day</th><th>Revenue / Day</th><th>Revenue</th><th>Return %</th>
+          </tr></thead>
+          <tbody id="fleet-body"></tbody></table>
+        </div>
       </div>
     </div>
 
@@ -519,6 +554,13 @@
       <div class="section-header"><div class="section-title">Promotions</div></div>
       <div id="promos-loading" class="spinner"></div>
       <div id="promos-content" style="display:none">
+        <div class="kpi-grid" id="promo-kpis"></div>
+        <div class="inv-note">
+          <span class="inv-note-icon">&#9432;</span>
+          <span><strong>Return on discount</strong> = revenue from promo orders ÷ the discount given away. It shows how
+          many dollars of sales each $1 of discount brought in. The verdict flags promos worth repeating vs ones
+          giving away margin for too little return.</span>
+        </div>
         <div class="chart-row cols-2">
           <div class="chart-card">
             <h3>Promo vs Non-Promo Orders</h3>
@@ -546,8 +588,9 @@
             <th onclick="sortTable('promo',4,'str')">Channel <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('promo',5,'num')">Orders <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('promo',6,'num')">Revenue <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('promo',7,'num')">Net Gain <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('promo',8,'num')">Avg Order <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',7,'num')">Discount Given <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('promo',9,'num')">Return on Disc. <span class="sa">&#8645;</span></th>
+            <th>Verdict</th>
           </tr></thead>
           <tbody id="promos-body"></tbody></table>
         </div>
@@ -642,6 +685,51 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Employees -->
+    <div class="section" id="sec-employees">
+      <div class="section-header">
+        <div class="section-title">Employees &amp; Labor</div>
+        <button class="btn-sm" onclick="exportCSV('employees')">&#8595; Export Excel</button>
+      </div>
+      <div id="employees-loading" class="spinner"></div>
+      <div id="employees-content" style="display:none">
+        <div class="kpi-grid" id="emp-kpis"></div>
+        <div class="inv-note">
+          <span class="inv-note-icon">&#9432;</span>
+          <span>Revenue is attributed to each associate via the sales-rep code on their orders and rentals.
+          The store doesn't record wages, so enter each person's hourly pay and typical hours per week below —
+          labor cost and revenue-per-labor-dollar update as you type. Wages are saved on this device only.</span>
+        </div>
+        <div class="chart-row cols-2">
+          <div class="chart-card">
+            <h3>Revenue by Employee</h3>
+            <div class="chart-wrap"><canvas id="chartEmpRev"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3>Revenue per Labor Dollar</h3>
+            <div class="chart-wrap"><canvas id="chartEmpProd"></canvas></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-toolbar"><h3 id="emp-count"></h3></div>
+          <table><thead><tr>
+            <th>Employee</th>
+            <th>Orders</th>
+            <th>Sales Rev</th>
+            <th>Rentals</th>
+            <th>Rental Rev</th>
+            <th>Total Rev</th>
+            <th>Avg Order</th>
+            <th>$/hr</th>
+            <th>Hrs/wk</th>
+            <th>Labor Cost</th>
+            <th>Rev / Labor $</th>
+          </tr></thead>
+          <tbody id="emp-body"></tbody></table>
+        </div>
       </div>
     </div>
 
@@ -820,6 +908,7 @@ async function loadSection(sec) {
   if (sec === 'dashboard')  await loadDashboard();
   if (sec === 'orders')     await loadOrders();
   if (sec === 'customers')  await loadCustomers();
+  if (sec === 'employees')  await loadEmployees();
   if (sec === 'products')   await loadProducts();
   if (sec === 'inventory')  await loadInventory();
   if (sec === 'rentals')    await loadRentals();
@@ -1298,6 +1387,89 @@ async function openCustModal(custId, name) {
 function closeCustModal() { document.getElementById('cust-modal').classList.remove('open'); }
 document.getElementById('cust-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeCustModal(); });
 
+// ── Employees / Labor ───────────────────────────────────────────────
+let _empData = null;
+// Manager-entered wages, per employee id, saved on this device.
+function getWages() { try { return JSON.parse(localStorage.getItem('mgr_wages') || '{}'); } catch { return {}; } }
+function getWage(id) { const w = getWages()[id]; return { rate: w?.rate ?? 16, hours: w?.hours ?? 32 }; }
+function setWage(id, field, val) {
+  const w = getWages(); w[id] = { ...getWage(id), ...w[id], [field]: +val };
+  localStorage.setItem('mgr_wages', JSON.stringify(w));
+}
+
+async function loadEmployees() {
+  show('employees-loading'); hide('employees-content');
+  try {
+    _empData = await api({ section: 'employees' });
+    hide('employees-loading'); show('employees-content');
+    renderEmployees();
+  } catch (e) { document.getElementById('employees-loading').innerHTML = err(e); }
+}
+
+// Labor cost for the selected period = rate x hours/week x weeks in period.
+function empLabor(e) {
+  if (e.isWeb) return { cost: 0, revPerLabor: null };
+  const { rate, hours } = getWage(e.id);
+  const weeks = _empData.periodDays / 7;
+  const cost = rate * hours * weeks;
+  return { cost, revPerLabor: cost > 0 ? e.totalRevenue / cost : null };
+}
+
+function renderEmployees() {
+  const people = _empData.employees.filter(e => !e.isWeb);
+  const web = _empData.employees.find(e => e.isWeb);
+  const totalRev = _empData.employees.reduce((s, e) => s + e.totalRevenue, 0);
+  const totalLabor = people.reduce((s, e) => s + empLabor(e).cost, 0);
+  const laborPct = totalRev > 0 ? totalLabor / totalRev * 100 : 0;
+  const revPerLabor = totalLabor > 0 ? totalRev / totalLabor : 0;
+
+  document.getElementById('emp-kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Employees</div><div class="kpi-value">${people.length}</div><div class="kpi-sub">${web ? 'plus web/online' : 'sales associates'}</div></div>
+    <div class="kpi coral"><div class="kpi-label">Revenue Attributed</div><div class="kpi-value">$${fmt(totalRev)}</div><div class="kpi-sub">selected period</div></div>
+    <div class="kpi gold"><div class="kpi-label">Labor Cost</div><div class="kpi-value">$${fmt(totalLabor)}</div><div class="kpi-sub">from entered wages</div></div>
+    <div class="kpi purple"><div class="kpi-label">Labor % of Revenue</div><div class="kpi-value">${laborPct.toFixed(1)}%</div></div>
+    <div class="kpi"><div class="kpi-label">Revenue / Labor $</div><div class="kpi-value">$${revPerLabor.toFixed(2)}</div><div class="kpi-sub">per $1 of wages</div></div>
+  `;
+
+  document.getElementById('emp-count').textContent = _empData.employees.length + ' associates';
+  document.getElementById('emp-body').innerHTML = _empData.employees.map(e => {
+    const { rate, hours } = getWage(e.id);
+    const { cost, revPerLabor } = empLabor(e);
+    const wageCells = e.isWeb
+      ? `<td colspan="3" style="color:var(--muted2);font-size:12px">online / automated — no labor</td>`
+      : `<td><input class="inv-input" style="width:64px" type="number" min="0" step="0.5" value="${rate}" onchange="setWage('${e.id}','rate',this.value);renderEmployees()"></td>
+         <td><input class="inv-input" style="width:64px" type="number" min="0" value="${hours}" onchange="setWage('${e.id}','hours',this.value);renderEmployees()"></td>
+         <td>$${fmt(cost)}</td>`;
+    return `<tr>
+      <td><strong>${e.id}</strong>${e.isWeb?' <span class="badge badge-grey">web</span>':''}</td>
+      <td>${e.orders.toLocaleString()}</td>
+      <td>$${fmt(e.salesRevenue)}</td>
+      <td>${e.rentals.toLocaleString()}</td>
+      <td>$${fmt(e.rentalRevenue)}</td>
+      <td style="font-weight:600">$${fmt(e.totalRevenue)}</td>
+      <td>$${fmt(e.avgOrderValue)}</td>
+      ${wageCells}
+      <td style="font-weight:600;color:var(--navy)">${revPerLabor==null?'—':'$'+revPerLabor.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+
+  // Charts: revenue by employee, and revenue per labor dollar (people only)
+  mkChart('chartEmpRev', {
+    type:'bar',
+    data:{ labels:_empData.employees.map(e=>e.id), datasets:[
+      { label:'Sales', data:_empData.employees.map(e=>e.salesRevenue), backgroundColor:'#00B4A0', borderRadius:3 },
+      { label:'Rentals', data:_empData.employees.map(e=>e.rentalRevenue), backgroundColor:'#1A7A9E', borderRadius:3 },
+    ]},
+    options:{ ...baseOpts(), scales:{ x:{ stacked:true, ticks:{color:'#6b7a8d'}, grid:{display:false} }, y:{ stacked:true, ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} } } }
+  });
+  const prodPeople = people.map(e => ({ id:e.id, v:empLabor(e).revPerLabor || 0 }));
+  mkChart('chartEmpProd', {
+    type:'bar',
+    data:{ labels:prodPeople.map(p=>p.id), datasets:[{ label:'Revenue per labor $', data:prodPeople.map(p=>p.v), backgroundColor:'#D99A2A', borderRadius:4 }]},
+    options:{ ...baseOpts(), scales:{ x:{ticks:{color:'#6b7a8d'},grid:{display:false}}, y:{ticks:{callback:v=>'$'+v,color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}} }, plugins:{ ...baseOpts().plugins, legend:{display:false} } }
+  });
+}
+
 // ── Products ────────────────────────────────────────────────────────
 let _prodsData = [], _prodsFiltered = [];
 async function loadProducts() {
@@ -1340,8 +1512,51 @@ async function loadInventory() {
       'Highest Forecast Demand — ' + (_invForecastMonth ? monthLabel(_invForecastMonth) : 'Next Month');
     refreshInvSummary();
     renderTopDemandChart(d.topDemand || []);
+    renderReorderSchedule();
     renderInvTable();
   } catch (e) { document.getElementById('inventory-loading').innerHTML = err(e); }
+}
+
+// Turns reorder points into a concrete "order this, by this date" list. Days
+// left = how long current stock lasts before hitting the reorder point at the
+// forecast sales rate; order-by date follows from that.
+function renderReorderSchedule() {
+  const HORIZON = 60; // show items due within 60 days (plus anything already due)
+  const today = new Date();
+  const rows = _invData
+    // Only items with meaningful ongoing demand (≥1 unit/month) — no point
+    // scheduling reorders for near-dead stock.
+    .filter(p => p.stockQty != null && p.forecastUnits >= 1)
+    .map(p => {
+      const daily = p.forecastUnits / 30;
+      const daysLeft = daily > 0 ? Math.max(0, Math.round((p.stockQty - p.reorderLevel) / daily)) : Infinity;
+      const orderBy = new Date(today.getTime() + daysLeft * 864e5);
+      const orderQty = Math.max(1, p.suggestedStock - p.reorderLevel);
+      return { ...p, daysLeft, orderBy, orderQty };
+    })
+    .filter(p => p.daysLeft <= HORIZON)
+    .sort((a, b) => a.daysLeft - b.daysLeft || b.forecastUnits - a.forecastUnits);
+
+  document.getElementById('reorder-sched-note').textContent =
+    rows.length ? rows.length + ' item' + (rows.length!==1?'s':'') + ' to order within ' + HORIZON + ' days' : '';
+  const body = document.getElementById('reorder-sched-body');
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">Nothing needs ordering in the next ${HORIZON} days.</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(p => {
+    const due = p.daysLeft <= 0;
+    const dateStr = p.orderBy.toISOString().slice(0,10);
+    return `<tr${due?' class="status-low"':''}>
+      <td style="font-weight:600;color:${due?'var(--coral)':'var(--text)'}">${due ? 'Now' : dateStr}</td>
+      <td><span style="font-family:monospace;color:var(--muted)">${p.sku}</span></td>
+      <td>${p.name}</td>
+      <td>${p.stockQty}</td>
+      <td>${p.forecastUnits}/mo</td>
+      <td>${due ? '<span class="badge badge-coral">overdue</span>' : p.daysLeft + ' days'}</td>
+      <td style="font-weight:600;color:var(--navy)">${p.orderQty}</td>
+    </tr>`;
+  }).join('');
 }
 
 // Recompute the KPI cards and reorder callout from current local data (so a
@@ -1496,7 +1711,34 @@ async function loadRentals() {
 
     mkChart('chartTopRentals', { type:'bar', data:{ labels:d.topRentals.map(r=>r.sku), datasets:[{data:d.topRentals.map(r=>r.revenue),backgroundColor:'#1A7A9E',borderRadius:4}]},
       options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}});
+
+    renderFleetUtil(d.utilization || []);
   } catch (e) { document.getElementById('rentals-loading').innerHTML = err(e); }
+}
+
+function renderFleetUtil(util) {
+  const top = util.slice(0, 12);
+  mkChart('chartFleetUtil', {
+    type:'bar',
+    data:{ labels: top.map(u=>u.name), datasets:[{ label:'Units out / day', data: top.map(u=>u.avgUnitsOut), backgroundColor:'#00B4A0', borderRadius:4 }]},
+    options:{ ...baseOpts(), indexAxis:'y', scales:{
+      x:{ ticks:{color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'}, title:{display:true,text:'Avg units out per day',color:'#6b7a8d'} },
+      y:{ ticks:{color:'#6b7a8d',font:{size:11}}, grid:{display:false} },
+    }, plugins:{ ...baseOpts().plugins, legend:{display:false},
+      tooltip:{ callbacks:{ label:c=>{ const u=top[c.dataIndex]; return [' Units out/day: '+u.avgUnitsOut, ' Revenue/day: $'+u.revenuePerDay, ' Rentals: '+u.txns]; } } } } }
+  });
+  document.getElementById('fleet-body').innerHTML = util.map(u => `
+    <tr>
+      <td><span style="font-family:monospace;color:var(--muted)">${u.sku}</span></td>
+      <td>${u.name}</td>
+      <td>${u.txns.toLocaleString()}</td>
+      <td>${u.unitDays.toLocaleString()}</td>
+      <td>${u.avgLength} day${u.avgLength===1?'':'s'}</td>
+      <td style="font-weight:600">${u.avgUnitsOut}</td>
+      <td>$${fmt(u.revenuePerDay)}</td>
+      <td>$${fmt(u.revenue)}</td>
+      <td>${u.returnRate}%</td>
+    </tr>`).join('');
 }
 
 // ── Promos ─────────────────────────────────────────────────────────
@@ -1532,15 +1774,41 @@ async function loadPromos() {
       options:{...baseOpts(),scales:{x:{ticks:{color:'#6b7a8d'},grid:{display:false}},y:{ticks:{color:'#6b7a8d'},grid:{color:'rgba(0,0,0,.06)'}}},plugins:{legend:{display:false}}}
     });
 
+    // ROI KPIs
+    const used = _promosData.filter(p => p.orderCount > 0);
+    const totalRev = used.reduce((s,p)=>s+p.revenue,0);
+    const totalDisc = used.reduce((s,p)=>s+p.sacrificed,0);
+    const overallROI = totalDisc > 0 ? totalRev/totalDisc : 0;
+    const withROI = used.filter(p=>p.sacrificed>0).map(p=>({...p, roi:p.revenue/p.sacrificed})).sort((a,b)=>b.roi-a.roi);
+    const best = withROI[0], worst = withROI[withROI.length-1];
+    document.getElementById('promo-kpis').innerHTML = `
+      <div class="kpi"><div class="kpi-label">Active Promos</div><div class="kpi-value">${used.length}</div><div class="kpi-sub">with orders</div></div>
+      <div class="kpi coral"><div class="kpi-label">Discount Given</div><div class="kpi-value">$${fmt(totalDisc)}</div><div class="kpi-sub">total margin sacrificed</div></div>
+      <div class="kpi gold"><div class="kpi-label">Return on Discount</div><div class="kpi-value">$${overallROI.toFixed(1)}</div><div class="kpi-sub">revenue per $1 discount</div></div>
+      <div class="kpi"><div class="kpi-label">Best Promo</div><div class="kpi-value" style="font-size:15px">${best?best.PromoCode:'—'}</div><div class="kpi-sub">${best?'$'+best.roi.toFixed(1)+' per $1':''}</div></div>
+      <div class="kpi purple"><div class="kpi-label">Weakest Promo</div><div class="kpi-value" style="font-size:15px">${worst?worst.PromoCode:'—'}</div><div class="kpi-sub">${worst?'$'+worst.roi.toFixed(1)+' per $1':''}</div></div>
+    `;
+
     renderPromosTable();
   } catch (e) { document.getElementById('promos-loading').innerHTML = err(e); }
 }
 
+function promoROI(p) {
+  if (!(p.sacrificed > 0)) return null;
+  return p.revenue / p.sacrificed;
+}
+function promoVerdict(roi, orderCount) {
+  if (roi == null) return '<span class="badge badge-grey">No discount</span>';
+  if (orderCount < 5) return '<span class="badge badge-grey">Too few</span>';
+  if (roi >= 8) return '<span class="badge badge-teal">Repeat</span>';
+  if (roi >= 4) return '<span class="badge badge-gold">OK</span>';
+  return '<span class="badge badge-coral">Review</span>';
+}
+
 function renderPromosTable() {
   document.getElementById('promos-body').innerHTML = _promosData.map(p => {
-    const net = p.revenue - p.sacrificed;
-    const sacrificedPct = p.revenue > 0 ? (p.sacrificed / p.revenue * 100).toFixed(1) : 0;
-    const netColor = net >= 0 ? 'var(--teal)' : 'var(--coral)';
+    const roi = promoROI(p);
+    const roiColor = roi == null ? 'var(--muted)' : roi >= 8 ? 'var(--teal)' : roi >= 4 ? 'var(--gold)' : 'var(--coral)';
     return `<tr>
       <td><span style="color:var(--teal);font-family:monospace">${p.PromoCode}</span></td>
       <td>${p.PromoName||'—'}</td><td>${p.PromoType||'—'}</td>
@@ -1548,9 +1816,9 @@ function renderPromosTable() {
       <td>${p.StartDate||'—'}</td><td>${p.EndDate||'—'}</td>
       <td>${p.Channel||'All'}</td>
       <td><strong>${p.orderCount}</strong></td>
-      <td>$${fmt(p.revenue)}</td>
-      <td style="color:${netColor};font-weight:600">$${fmt(net)}<span style="font-size:11px;font-weight:400;color:var(--muted)"> (−${sacrificedPct}% disc.)</span></td>
-      <td>$${fmt(p.avgOrder)}</td>
+      <td>$${fmt(p.sacrificed)}</td>
+      <td style="color:${roiColor};font-weight:600">${roi==null?'—':'$'+roi.toFixed(1)}</td>
+      <td>${promoVerdict(roi, p.orderCount)}</td>
     </tr>`;
   }).join('');
 }
@@ -1845,7 +2113,7 @@ function sortTable(key, col, type) {
     if (key==='cust')   return [item.CustomerID,item.FirstName+' '+item.LastName,item.Country,item.CustomerType,item.loyalty?'Yes':'No',item.orderCount,parseFloat(item.lifetimeValue),item.lastOrder][col];
     if (key==='prod')   return [item.sku,item.name,item.category,item.units,item.revenue,item.margin][col];
     if (key==='inv')    return [item.sku,item.name,item.category,item.forecastUnits??-1,item.stockQty??-1,item.reorderLevel??-1,item.suggestedStock??-1,item.status][col];
-    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.revenue)-parseFloat(item.sacrificed),parseFloat(item.avgOrder)][col];
+    if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.sacrificed),parseFloat(item.avgOrder),(item.sacrificed>0?item.revenue/item.sacrificed:0)][col];
     return '';
   }
   const cmp = (a,b) => {
@@ -1872,6 +2140,9 @@ function exportCSV(section) {
   } else if (section==='products') {
     rows=[['SKU','Name','Category','Units','Revenue','Margin%'],
       ..._prodsFiltered.map(p=>[p.sku,p.name,p.category,p.units,p.revenue,p.margin])]; filename='products.xlsx'; sheetName='Products';
+  } else if (section==='employees' && _empData) {
+    rows=[['Employee','Orders','SalesRevenue','Rentals','RentalRevenue','TotalRevenue','AvgOrder','HourlyRate','HoursPerWeek','LaborCost','RevPerLaborDollar'],
+      ..._empData.employees.map(e=>{ const w=getWage(e.id); const l=empLabor(e); return [e.id,e.orders,e.salesRevenue,e.rentals,e.rentalRevenue,e.totalRevenue,e.avgOrderValue, e.isWeb?'':w.rate, e.isWeb?'':w.hours, e.isWeb?'':+l.cost.toFixed(2), l.revPerLabor==null?'':+l.revPerLabor.toFixed(2)]; })]; filename='employees.xlsx'; sheetName='Employees';
   }
   if (!rows) return;
   const [header, ...dataRows] = rows;

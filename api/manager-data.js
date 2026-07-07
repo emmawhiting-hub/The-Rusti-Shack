@@ -830,11 +830,11 @@ async function handler(req, res) {
           .order('RentalDate', { ascending: false })),
         fetchAll(() => sb.from('Orders').select('OrderDate,OrderTotal')
           .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
-        sb.from('products').select('sku,category').limit(5000),
+        sb.from('products').select('sku,category,name').limit(5000),
       ]);
 
-      const skuCat     = {};
-      for (const p of (productsRes.data||[])) skuCat[p.sku] = p.category;
+      const skuCat = {}, skuName = {};
+      for (const p of (productsRes.data||[])) { skuCat[p.sku] = p.category; skuName[p.sku] = p.name; }
 
       const totalRev   = allRentals.reduce((s,r)=>s+parseFloat(r.RentalRevenue||0),0);
       const totalSales = allSales.reduce((s,o)=>s+parseFloat(o.OrderTotal||0),0);
@@ -888,7 +888,36 @@ async function handler(req, res) {
         ? +((totalRev / (totalRev + totalSales)) * 100).toFixed(1)
         : 0;
 
-      return res.json({ totalRev:totalRev.toFixed(2), totalTransactions:allRentals.length, returnRate, topRentals, monthly, byCategory, overallPct });
+      // ── Fleet utilization ────────────────────────────────────
+      // Each transaction's unit-days rented = RentalRevenue / DailyRate
+      // (DailyRate is per unit per day). "Avg units out per day" over the
+      // period is the utilization proxy — how hard each item works.
+      let minD = null, maxD = null;
+      for (const r of allRentals) { if (!minD || r.RentalDate < minD) minD = r.RentalDate; if (!maxD || r.RentalDate > maxD) maxD = r.RentalDate; }
+      const periodDays = (minD && maxD) ? Math.max(1, Math.round((new Date(maxD) - new Date(minD)) / 864e5) + 1) : 1;
+
+      const util = {};
+      for (const r of allRentals) {
+        const dr = parseFloat(r.DailyRate || 0);
+        const unitDays = dr > 0 ? parseFloat(r.RentalRevenue || 0) / dr : (r.Quantity || 0);
+        if (!util[r.SKU]) util[r.SKU] = { sku: r.SKU, txns: 0, units: 0, unitDays: 0, revenue: 0, returned: 0 };
+        const u = util[r.SKU];
+        u.txns++; u.units += r.Quantity || 0; u.unitDays += unitDays;
+        u.revenue += parseFloat(r.RentalRevenue || 0);
+        if (r.Returned === 'Yes') u.returned++;
+      }
+      const utilization = Object.values(util).map(u => ({
+        sku: u.sku, name: skuName[u.sku] || u.sku, category: skuCat[u.sku] || 'Other',
+        txns: u.txns, units: u.units,
+        unitDays:      Math.round(u.unitDays),
+        revenue:       +u.revenue.toFixed(2),
+        avgLength:     +(u.unitDays / Math.max(1, u.units)).toFixed(1),
+        avgUnitsOut:   +(u.unitDays / periodDays).toFixed(2),
+        revenuePerDay: +(u.revenue / periodDays).toFixed(2),
+        returnRate:    +(u.returned / u.txns * 100).toFixed(0),
+      })).sort((a, b) => b.avgUnitsOut - a.avgUnitsOut);
+
+      return res.json({ totalRev:totalRev.toFixed(2), totalTransactions:allRentals.length, returnRate, topRentals, monthly, byCategory, overallPct, utilization, periodDays });
     }
 
     // ── Promos ───────────────────────────────────────────────
@@ -955,6 +984,38 @@ async function handler(req, res) {
           avgNoPromo:    ordersNoPromo   > 0 ? +(revenueNoPromo/ordersNoPromo).toFixed(2)     : 0,
         }
       });
+    }
+
+    // ── Employees / Labor ────────────────────────────────────
+    if (section === 'employees') {
+      // No staff table exists — attribute activity via the SalesAssociate code
+      // recorded on each order and rental (E001-E004 are people; WEB is online).
+      const [orders, rentals] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('SalesAssociate,OrderDate,OrderTotal,Channel')
+          .gte('OrderDate', dateFrom).lte('OrderDate', dateTo)),
+        fetchAll(() => sb.from('RentalTransactions').select('SalesAssociate,RentalDate,RentalRevenue,Quantity')
+          .gte('RentalDate', dateFrom).lte('RentalDate', dateTo)),
+      ]);
+
+      const emp = {};
+      const get = id => emp[id] || (emp[id] = { id, orders: 0, salesRev: 0, rentals: 0, rentalRev: 0, months: new Set() });
+      for (const o of orders) { const e = get(o.SalesAssociate || '—'); e.orders++; e.salesRev += parseFloat(o.OrderTotal || 0); e.months.add(o.OrderDate.slice(0, 7)); }
+      for (const r of rentals) { const e = get(r.SalesAssociate || '—'); e.rentals++; e.rentalRev += parseFloat(r.RentalRevenue || 0); e.months.add(r.RentalDate.slice(0, 7)); }
+
+      const employees = Object.values(emp).map(e => ({
+        id: e.id,
+        isWeb: e.id === 'WEB',
+        orders: e.orders,
+        salesRevenue: +e.salesRev.toFixed(2),
+        rentals: e.rentals,
+        rentalRevenue: +e.rentalRev.toFixed(2),
+        totalRevenue: +(e.salesRev + e.rentalRev).toFixed(2),
+        avgOrderValue: e.orders ? +(e.salesRev / e.orders).toFixed(2) : 0,
+        activeMonths: e.months.size,
+      })).sort((a, b) => b.totalRevenue - a.totalRevenue);
+
+      const periodDays = Math.max(1, Math.round((new Date(dateTo) - new Date(dateFrom)) / 864e5) + 1);
+      return res.json({ employees, periodDays, from: dateFrom, to: dateTo });
     }
 
     // ── Inventory ────────────────────────────────────────────
