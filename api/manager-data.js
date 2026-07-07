@@ -33,7 +33,8 @@ async function fetchAll(buildQuery) {
 
 // ── Forecasting helpers (real statistical models, no AI) ──────────────
 const SEASON = 12;              // monthly seasonality period
-const FC_Z   = 1.28;            // ~80% prediction interval
+const FC_Z80 = 1.28;            // ~80% prediction interval
+const FC_Z95 = 1.96;            // ~95% prediction interval
 const FC_HMAX = 24;             // forecast up to 24 months ahead
 
 const fcMean = a => a.reduce((s, x) => s + x, 0) / (a.length || 1);
@@ -63,7 +64,12 @@ function fcBacktest(y, predictNext, start) {
   return c ? +(sum / c).toFixed(4) : null;
 }
 
-// Model 1 — Linear trend (ordinary least squares). Prediction interval uses
+// Each model returns { means[], se[], mape, predict } where se[h] is the
+// forecast standard error (so the caller can draw bands at any confidence
+// level) and predict(slice) is the one-step-ahead point forecast used for
+// backtesting and for blending into the ensemble.
+
+// Model 1 — Linear trend (ordinary least squares). The standard error uses
 // the exact OLS formula, so the band widens as the horizon moves away from
 // the centre of the data.
 function fcLinear(y, H, btStart) {
@@ -79,14 +85,14 @@ function fcLinear(y, H, btStart) {
   const sigma = Math.sqrt(resid.reduce((s, r) => s + r * r, 0) / Math.max(1, n - 2));
   const tbar = (n - 1) / 2; let Sxx = 0;
   for (let t = 0; t < n; t++) Sxx += (t - tbar) ** 2;
-  const means = [], lower = [], upper = [];
+  const means = [], se = [];
   for (let h = 1; h <= H; h++) {
-    const tt = n - 1 + h, m = a + b * tt;
-    const se = sigma * Math.sqrt(1 + 1 / n + (tt - tbar) ** 2 / Sxx);
-    means.push(m); lower.push(Math.max(0, m - FC_Z * se)); upper.push(m + FC_Z * se);
+    const tt = n - 1 + h;
+    means.push(a + b * tt);
+    se.push(sigma * Math.sqrt(1 + 1 / n + (tt - tbar) ** 2 / Sxx));
   }
-  const mape = fcBacktest(y, yy => { const f = fit(yy); return f.a + f.b * yy.length; }, btStart);
-  return { means, lower, upper, mape };
+  const predict = yy => { const f = fit(yy); return f.a + f.b * yy.length; };
+  return { means, se, mape: fcBacktest(y, predict, btStart), predict };
 }
 
 // Model 2 — Seasonal naive with growth. Each future month = the same month a
@@ -106,10 +112,10 @@ function fcSeasonalNaive(y, H, btStart) {
   const resid = [];
   for (let t = s; t < n; t++) if (y[t - s] > 0) resid.push(y[t] - y[t - s] * g);
   const sigma = fcStd(resid);
-  const lower = [], upper = [];
-  for (let h = 1; h <= H; h++) { const se = sigma * Math.sqrt(h); lower.push(Math.max(0, means[h - 1] - FC_Z * se)); upper.push(means[h - 1] + FC_Z * se); }
-  const mape = fcBacktest(y, yy => { const gg = growth(yy); return yy[yy.length - s] * gg; }, btStart);
-  return { means, lower, upper, mape };
+  const se = [];
+  for (let h = 1; h <= H; h++) se.push(sigma * Math.sqrt(h));
+  const predict = yy => { const gg = growth(yy); return yy[yy.length - s] * gg; };
+  return { means, se, mape: fcBacktest(y, predict, btStart), predict };
 }
 
 // Model 3 — Holt-Winters additive (triple exponential smoothing): level +
@@ -147,17 +153,96 @@ function fcHoltWinters(y, H, btStart) {
   const p = hwPick(y);
   const r = hwRun(y, p.al, p.be, p.ga);
   const sigma = fcStd(r.oneStep.map(o => y[o.t] - o.pred));
-  const means = [], lower = [], upper = [];
+  const means = [], se = [];
   for (let h = 1; h <= H; h++) {
-    const i = n - 1 + h, m = r.L + h * r.T + r.seas[i % s], se = sigma * Math.sqrt(h);
-    means.push(m); lower.push(Math.max(0, m - FC_Z * se)); upper.push(m + FC_Z * se);
+    const i = n - 1 + h;
+    means.push(r.L + h * r.T + r.seas[i % s]);
+    se.push(sigma * Math.sqrt(h));
   }
-  const mape = fcBacktest(y, yy => {
+  const predict = yy => {
     if (yy.length < 2 * s) return yy[yy.length - 1];
     const rr = hwRun(yy, p.al, p.be, p.ga);
     return rr.L + rr.T + rr.seas[yy.length % s];
-  }, btStart);
-  return { means, lower, upper, mape };
+  };
+  return { means, se, mape: fcBacktest(y, predict, btStart), predict };
+}
+
+// Model 4 — Ensemble: an inverse-error weighted blend of the three models
+// above. Averaging independent forecasts usually beats any single one, and
+// the blend is more robust to any one model reading the future wrong.
+function fcEnsemble(y, H, btStart, base) {
+  const raw = base.map(m => (m.mape && m.mape > 0) ? 1 / m.mape : 0);
+  const sum = raw.reduce((a, b) => a + b, 0) || 1;
+  const w = raw.map(x => x / sum);
+  const means = [];
+  for (let h = 0; h < H; h++) means.push(base.reduce((s, m, i) => s + w[i] * m.means[h], 0));
+  const predict = yy => base.reduce((s, m, i) => s + w[i] * m.predict(yy), 0);
+  const resid = [];
+  for (let t = btStart; t < y.length; t++) { const f = predict(y.slice(0, t)); if (isFinite(f)) resid.push(y[t] - f); }
+  const sigma = fcStd(resid);
+  const se = [];
+  for (let h = 1; h <= H; h++) se.push(sigma * Math.sqrt(h));
+  return { means, se, mape: fcBacktest(y, predict, btStart), predict, weights: w };
+}
+
+// ── Per-SKU demand forecast → recommended stock levels ────────────────
+// Projects next-month unit demand for each product from its recent sales
+// level adjusted by its own seasonal pattern, then turns that into a
+// recommended stock level (≈1 month of cover) and reorder point (≈2 weeks of
+// lead time) — each padded with safety stock sized to the product's demand
+// volatility for ~90% service. Returns a map keyed by product code.
+function computeSkuDemand(orders, lines) {
+  const orderMonth = {};
+  for (const o of orders) orderMonth[o.OrderID] = o.OrderDate.slice(0, 7);
+
+  // Continuous month list, trimming the trailing incomplete month(s).
+  const totalByMonth = {}, unitsBySkuMonth = {};
+  for (const l of lines) {
+    const m = orderMonth[l.OrderID]; if (!m) continue;
+    const q = l.Quantity || 0;
+    totalByMonth[m] = (totalByMonth[m] || 0) + q;
+    (unitsBySkuMonth[l.ProductCode] = unitsBySkuMonth[l.ProductCode] || {});
+    unitsBySkuMonth[l.ProductCode][m] = (unitsBySkuMonth[l.ProductCode][m] || 0) + q;
+  }
+  const present = Object.keys(totalByMonth).sort();
+  if (!present.length) return { demand: {}, nextMonth: null };
+  let months = [];
+  for (let m = present[0]; m <= present[present.length - 1]; m = addMonths(m, 1)) months.push(m);
+  while (months.length > 13) {
+    const last = totalByMonth[months[months.length - 1]] || 0;
+    const med = fcMedian(months.slice(-7, -1).map(m => totalByMonth[m] || 0));
+    if (med > 0 && last < 0.25 * med) months.pop(); else break;
+  }
+  const lastMonth = months[months.length - 1];
+  const nextMonth = addMonths(lastMonth, 1);
+  const nextCal = +nextMonth.split('-')[1];        // calendar month 1..12 being forecast
+
+  const demand = {};
+  for (const [sku, byMonth] of Object.entries(unitsBySkuMonth)) {
+    const arr = months.map(m => byMonth[m] || 0);
+    const n = arr.length;
+    const overallAvg = fcMean(arr);
+    const recentAvg  = fcMean(arr.slice(Math.max(0, n - 6)));
+    const std12      = fcStd(arr.slice(Math.max(0, n - 12)));
+
+    // Seasonal factor for the month being forecast.
+    let seasonal = 1;
+    if (overallAvg > 0) {
+      const sameMonthVals = [];
+      months.forEach((m, i) => { if (+m.split('-')[1] === nextCal) sameMonthVals.push(arr[i]); });
+      if (sameMonthVals.length) seasonal = Math.min(2, Math.max(0.5, fcMean(sameMonthVals) / overallAvg));
+    }
+
+    const forecastUnits = +(recentAvg * seasonal).toFixed(1);
+    const safety = Math.ceil(1.28 * std12);
+    demand[sku] = {
+      forecastUnits,
+      avgMonthly:      +recentAvg.toFixed(1),
+      suggestedStock:  Math.max(0, Math.ceil(forecastUnits) + safety),   // ~1 month cover + safety
+      suggestedReorder: Math.max(1, Math.ceil(forecastUnits * 0.5) + safety), // ~2 week lead + safety
+    };
+  }
+  return { demand, nextMonth };
 }
 
 async function handler(req, res) {
@@ -187,42 +272,23 @@ async function handler(req, res) {
       return res.json({ ok: true });
     }
 
-    // ── POST: auto-populate inventory from 2025 sales ────────
+    // ── POST: auto-populate inventory from the demand forecast ────────
     if (req.method === 'POST' && section === 'auto_inventory') {
-      // OrderLines has no OrderDate column — join through Orders to find
-      // which lines fall in 2025, then filter the full OrderLines table in
-      // memory (with 15k+ orders, .in(orderIds) would build an unworkably
-      // long query string).
-      const [orders2025, allLines, prodsRes] = await Promise.all([
-        fetchAll(() => sb.from('Orders').select('OrderID').gte('OrderDate', '2025-01-01').lte('OrderDate', '2025-12-31')),
+      const [orders, lines, prodsRes] = await Promise.all([
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate')),
         fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity')),
         sb.from('products').select('sku').limit(5000),
       ]);
-      const orderIdSet2025 = new Set(orders2025.map(o => o.OrderID));
+      const { demand } = computeSkuDemand(orders, lines);
 
-      const unitsBySku = {};
-      for (const l of allLines) {
-        if (!orderIdSet2025.has(l.OrderID)) continue;
-        unitsBySku[l.ProductCode] = (unitsBySku[l.ProductCode] || 0) + (l.Quantity || 0);
-      }
+      const now = new Date().toISOString();
+      const upserts = (prodsRes.data || []).map(p => {
+        const d = demand[p.sku];
+        return d
+          ? { SKU: p.sku, StockQty: Math.max(2, d.suggestedStock), ReorderLevel: d.suggestedReorder, LastUpdated: now }
+          : { SKU: p.sku, StockQty: 2, ReorderLevel: 1, LastUpdated: now }; // never sold → minimal
+      });
 
-      const upserts = [];
-      // Products with 2025 sales
-      for (const [sku, units] of Object.entries(unitsBySku)) {
-        upserts.push({
-          SKU:          sku,
-          StockQty:     Math.max(5, Math.round(units / 12)), // ~1 month supply
-          ReorderLevel: Math.max(1, Math.round(units * 0.02)),
-          LastUpdated:  new Date().toISOString(),
-        });
-      }
-      // Catalog products with no 2025 sales get minimal defaults
-      const soldSkus = new Set(Object.keys(unitsBySku));
-      for (const p of (prodsRes.data || [])) {
-        if (!soldSkus.has(p.sku)) {
-          upserts.push({ SKU: p.sku, StockQty: 5, ReorderLevel: 1, LastUpdated: new Date().toISOString() });
-        }
-      }
       const { error } = await sb.from('Inventory').upsert(upserts, { onConflict: 'SKU' });
       if (error) return res.status(500).json({ error: error.message });
       return res.json({ ok: true, updated: upserts.length });
@@ -389,26 +455,46 @@ async function handler(req, res) {
       const futureMonths = [];
       for (let h = 1; h <= FC_HMAX; h++) futureMonths.push(addMonths(lastMonth, h));
 
-      const build = (name, key, blurbKey, r) => ({
-        key, name, blurbKey,
-        mape: r.mape,
-        forecast: futureMonths.map((m, i) => ({
-          month: m,
-          mean:  +r.means[i].toFixed(2),
-          lower: +r.lower[i].toFixed(2),
-          upper: +r.upper[i].toFixed(2),
-        })),
-      });
+      const build = (name, key, r) => {
+        // Projected next-12-months total, with a range derived from the sum of
+        // per-month forecast variances (√Σσ²).
+        const h12 = Math.min(12, FC_HMAX);
+        let tot = 0, varSum = 0;
+        for (let i = 0; i < h12; i++) { tot += r.means[i]; varSum += r.se[i] * r.se[i]; }
+        const totSe = Math.sqrt(varSum);
+        return {
+          key, name, mape: r.mape,
+          forecast: futureMonths.map((m, i) => ({
+            month: m,
+            mean: +r.means[i].toFixed(2),
+            lo80: +Math.max(0, r.means[i] - FC_Z80 * r.se[i]).toFixed(2),
+            hi80: +(r.means[i] + FC_Z80 * r.se[i]).toFixed(2),
+            lo95: +Math.max(0, r.means[i] - FC_Z95 * r.se[i]).toFixed(2),
+            hi95: +(r.means[i] + FC_Z95 * r.se[i]).toFixed(2),
+          })),
+          next12: {
+            total: +tot.toFixed(0),
+            lo: +Math.max(0, tot - FC_Z80 * totSe).toFixed(0),
+            hi: +(tot + FC_Z80 * totSe).toFixed(0),
+          },
+        };
+      };
+
+      const linear   = fcLinear(y, FC_HMAX, btStart);
+      const seasonal  = fcSeasonalNaive(y, FC_HMAX, btStart);
+      const holtw     = fcHoltWinters(y, FC_HMAX, btStart);
+      const ensemble  = fcEnsemble(y, FC_HMAX, btStart, [linear, seasonal, holtw]);
 
       const models = [
-        build('Linear Trend',   'linear',  'linear',  fcLinear(y, FC_HMAX, btStart)),
-        build('Seasonal Naive', 'seasonal', 'seasonal', fcSeasonalNaive(y, FC_HMAX, btStart)),
-        build('Holt-Winters',   'holtwinters', 'holtwinters', fcHoltWinters(y, FC_HMAX, btStart)),
+        build('Linear Trend',   'linear',      linear),
+        build('Seasonal Naive', 'seasonal',    seasonal),
+        build('Holt-Winters',   'holtwinters', holtw),
+        build('Ensemble Blend', 'ensemble',    ensemble),
       ];
 
       return res.json({
         target: 'Total monthly revenue (sales + rentals)',
-        history, lastMonth, horizonMax: FC_HMAX, band: 80, models,
+        history, lastMonth, horizonMax: FC_HMAX, models,
       });
     }
 
@@ -852,35 +938,52 @@ async function handler(req, res) {
 
     // ── Inventory ────────────────────────────────────────────
     if (section === 'inventory') {
-      const [prodsRes, invRes] = await Promise.all([
+      const [prodsRes, invRes, orders, lines] = await Promise.all([
         sb.from('products').select('sku,name,category,subcategory,price,availability'),
         sb.from('Inventory').select('*').then(r=>r).catch(()=>({ data:[] })),
+        fetchAll(() => sb.from('Orders').select('OrderID,OrderDate')),
+        fetchAll(() => sb.from('OrderLines').select('OrderID,ProductCode,Quantity')),
       ]);
 
       const invMap = {};
       for (const i of (invRes.data||[])) invMap[i.SKU] = i;
+      const { demand, nextMonth } = computeSkuDemand(orders, lines);
 
       const products = (prodsRes.data||[])
         .filter(p => p.availability !== 'Rental only')
-        .map(p => ({
-          sku:          p.sku,
-          name:         p.name,
-          category:     p.category,
-          price:        p.price,
-          stockQty:     invMap[p.sku] != null ? invMap[p.sku].StockQty     : null,
-          reorderLevel: invMap[p.sku] != null ? invMap[p.sku].ReorderLevel : 5,
-          lastUpdated:  invMap[p.sku]?.LastUpdated ?? null,
-          status:       invMap[p.sku] == null        ? 'untracked'
-                      : invMap[p.sku].StockQty === 0 ? 'stockout'
-                      : invMap[p.sku].StockQty <= invMap[p.sku].ReorderLevel ? 'low'
-                      : 'ok',
-        }));
+        .map(p => {
+          const d = demand[p.sku] || { forecastUnits: 0, suggestedStock: 0, suggestedReorder: 1 };
+          const stockQty = invMap[p.sku] != null ? invMap[p.sku].StockQty : null;
+          return {
+            sku:          p.sku,
+            name:         p.name,
+            category:     p.category,
+            price:        p.price,
+            stockQty,
+            reorderLevel: invMap[p.sku] != null ? invMap[p.sku].ReorderLevel : 5,
+            lastUpdated:  invMap[p.sku]?.LastUpdated ?? null,
+            // Forecast-driven fields
+            forecastUnits:    d.forecastUnits,
+            suggestedStock:   d.suggestedStock,
+            suggestedReorder: d.suggestedReorder,
+            // Will the current stock cover the forecast month's demand?
+            coversForecast:   stockQty != null ? stockQty >= d.forecastUnits : null,
+            status:       invMap[p.sku] == null        ? 'untracked'
+                        : invMap[p.sku].StockQty === 0 ? 'stockout'
+                        : invMap[p.sku].StockQty <= invMap[p.sku].ReorderLevel ? 'low'
+                        : 'ok',
+          };
+        });
 
       const stockouts  = products.filter(p=>p.status==='stockout').length;
       const lowStock   = products.filter(p=>p.status==='low').length;
       const untracked  = products.filter(p=>p.status==='untracked').length;
+      // Products whose forecast demand exceeds what's on the shelf.
+      const underStocked = products.filter(p => p.stockQty != null && p.forecastUnits > 0 && p.stockQty < p.forecastUnits).length;
+      const topDemand = [...products].sort((a,b)=>b.forecastUnits-a.forecastUnits).slice(0,10)
+        .map(p=>({ sku:p.sku, name:p.name, forecastUnits:p.forecastUnits, stockQty:p.stockQty, suggestedStock:p.suggestedStock }));
 
-      return res.json({ products, stockouts, lowStock, untracked });
+      return res.json({ products, stockouts, lowStock, untracked, underStocked, topDemand, forecastMonth: nextMonth });
     }
 
     // ── Financials ───────────────────────────────────────────

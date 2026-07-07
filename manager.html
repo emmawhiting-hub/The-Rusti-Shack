@@ -119,6 +119,10 @@
   .fc-horizon-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
   .fc-horizon-row input[type=range]{flex:1;accent-color:var(--teal)}
   #fc-horizon-label{font-size:13px;font-weight:600;white-space:nowrap;min-width:90px;text-align:right;color:var(--navy-dark)}
+  .fc-next12{display:inline-flex;align-items:baseline;gap:10px;flex-wrap:wrap;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:16px}
+  .fc-next12 .n12-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .fc-next12 .n12-val{font-size:20px;font-weight:800;color:var(--navy-dark)}
+  .fc-next12 .n12-range{font-size:12px;color:var(--muted)}
   .fc-info-section{margin-bottom:16px}
   .fc-info-section h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
   .fc-info-section p{font-size:13px;line-height:1.5;color:var(--text)}
@@ -411,11 +415,23 @@
     <div class="section" id="sec-inventory">
       <div class="section-header">
         <div class="section-title">Inventory</div>
-        <button class="btn-sm" id="autofill-btn" onclick="autoFillInventory()">&#9654; Auto-fill from 2025 Sales</button>
+        <button class="btn-sm" id="autofill-btn" onclick="autoFillInventory()">&#9654; Apply Forecast-Based Stock Levels</button>
       </div>
       <div id="inventory-loading" class="spinner"></div>
       <div id="inventory-content" style="display:none">
         <div class="kpi-grid" id="inv-kpis"></div>
+
+        <div class="chart-row cols-1">
+          <div class="chart-card">
+            <h3 id="topdemand-title">Highest Forecast Demand — Next Month</h3>
+            <div class="chart-wrap tall"><canvas id="chartTopDemand"></canvas></div>
+            <div style="font-size:11px;color:var(--muted2);margin-top:10px">
+              Projected units sold next month per product (from each item's recent sales and its own seasonal pattern).
+              Bars are teal when current stock covers the forecast, coral when it falls short.
+            </div>
+          </div>
+        </div>
+
         <div class="table-card">
           <div class="table-toolbar">
             <h3 id="inv-count"></h3>
@@ -426,10 +442,11 @@
             <th onclick="sortTable('inv',0,'str')">SKU <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('inv',1,'str')">Name <span class="sa">&#8645;</span></th>
             <th onclick="sortTable('inv',2,'str')">Category <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('inv',3,'num')">Stock Qty <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('inv',4,'num')">Reorder At <span class="sa">&#8645;</span></th>
-            <th onclick="sortTable('inv',5,'str')">Status <span class="sa">&#8645;</span></th>
-            <th>Last Updated</th>
+            <th onclick="sortTable('inv',3,'num')">Forecast / mo <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',4,'num')">Stock Qty <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',5,'num')">Reorder At <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',6,'num')">Suggested <span class="sa">&#8645;</span></th>
+            <th onclick="sortTable('inv',7,'str')">Status <span class="sa">&#8645;</span></th>
             <th></th>
           </tr></thead>
           <tbody id="inv-body"></tbody></table>
@@ -547,8 +564,14 @@
         <!-- Historicals -->
         <div class="chart-row cols-1">
           <div class="chart-card">
-            <h3>Historical Performance — Revenue &amp; Gross Margin</h3>
-            <div class="chart-wrap tall"><canvas id="chartHist"></canvas></div>
+            <h3>Historical Revenue — Monthly (Sales + Rentals)</h3>
+            <div class="chart-wrap tall"><canvas id="chartHistRev"></canvas></div>
+          </div>
+        </div>
+        <div class="chart-row cols-1">
+          <div class="chart-card">
+            <h3>Historical Gross Margin — Monthly</h3>
+            <div class="chart-wrap"><canvas id="chartHistMargin"></canvas></div>
           </div>
         </div>
 
@@ -562,6 +585,8 @@
             <button class="btn-sm" id="fc-info-btn" onclick="openForecastInfo()" title="How this model works" style="white-space:nowrap">&#9432; How it works</button>
           </div>
 
+          <div id="fc-next12" class="fc-next12"></div>
+
           <div id="fc-models" class="fc-models"></div>
 
           <div class="fc-horizon-row">
@@ -572,8 +597,8 @@
 
           <div class="chart-wrap tall"><canvas id="chartForecast"></canvas></div>
           <div style="font-size:11px;color:var(--muted2);margin-top:10px">
-            Solid line is actual history; dashed line is the forecast. The shaded band is the 80% likely range —
-            it widens the further out you look, because the future gets less certain.
+            Solid line is actual history; dashed line is the forecast. The darker band is the 80% likely range and the
+            lighter band the 95% range — both widen the further out you look, because the future gets less certain.
           </div>
         </div>
 
@@ -1192,13 +1217,35 @@ async function loadInventory() {
     const d = await api({ section: 'inventory' });
     _invData = d.products || []; _invFiltered = [..._invData];
     hide('inventory-loading'); show('inventory-content');
+    const moLabel = d.forecastMonth ? monthLabel(d.forecastMonth) : 'next month';
     document.getElementById('inv-kpis').innerHTML = `
       <div class="kpi coral"><div class="kpi-label">Stockouts</div><div class="kpi-value">${d.stockouts}</div><div class="kpi-sub">Stock = 0</div></div>
       <div class="kpi gold"><div class="kpi-label">Low Stock</div><div class="kpi-value">${d.lowStock}</div><div class="kpi-sub">At or below reorder level</div></div>
+      <div class="kpi coral"><div class="kpi-label">Under Forecast</div><div class="kpi-value">${d.underStocked}</div><div class="kpi-sub">Stock below ${moLabel} demand</div></div>
       <div class="kpi"><div class="kpi-label">Untracked</div><div class="kpi-value">${d.untracked}</div><div class="kpi-sub">No qty entered yet</div></div>
     `;
+    document.getElementById('topdemand-title').textContent =
+      'Highest Forecast Demand — ' + moLabel;
+    renderTopDemandChart(d.topDemand || []);
     renderInvTable();
   } catch (e) { document.getElementById('inventory-loading').innerHTML = err(e); }
+}
+
+function renderTopDemandChart(top) {
+  mkChart('chartTopDemand', {
+    type:'bar',
+    data:{ labels: top.map(t=>t.name), datasets:[{
+      label:'Forecast units', data: top.map(t=>t.forecastUnits),
+      backgroundColor: top.map(t=> (t.stockQty!=null && t.stockQty < t.forecastUnits) ? 'rgba(232,98,42,.75)' : 'rgba(0,180,160,.7)'),
+      borderRadius:4,
+    }]},
+    options:{ ...baseOpts(), indexAxis:'y', scales:{
+      x:{ ticks:{color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'}, title:{display:true,text:'Forecast units next month',color:'#6b7a8d'} },
+      y:{ ticks:{color:'#6b7a8d',font:{size:11}}, grid:{display:false} },
+    }, plugins:{ ...baseOpts().plugins, legend:{display:false},
+      tooltip:{ callbacks:{ label:c=>{ const t=top[c.dataIndex]; return [' Forecast: '+t.forecastUnits+' units', ' In stock: '+(t.stockQty==null?'—':t.stockQty), ' Suggested: '+t.suggestedStock]; } } }
+    } }
+  });
 }
 function filterInventory() {
   const q = document.getElementById('inv-search').value.toLowerCase();
@@ -1213,17 +1260,29 @@ function renderInvTable() {
                       : p.status === 'untracked'  ? '<span class="badge badge-grey">Untracked</span>'
                       : '<span class="badge badge-teal">OK</span>';
     const stockVal    = p.stockQty != null ? p.stockQty : '';
+    const under = p.stockQty != null && p.forecastUnits > 0 && p.stockQty < p.forecastUnits;
+    const fcCell = `<span style="font-weight:600;color:${under?'var(--coral)':'var(--text)'}">${p.forecastUnits}</span>` +
+                   (under ? ' <span style="font-size:10px;color:var(--coral)">short</span>' : '');
     return `<tr class="status-${p.status}">
       <td><span style="font-family:monospace;color:var(--muted)">${p.sku}</span></td>
       <td>${p.name}</td>
       <td><span class="badge badge-blue">${p.category}</span></td>
+      <td>${fcCell}</td>
       <td><input class="inv-input" id="sq-${p.sku}" type="number" min="0" value="${stockVal}" placeholder="—"></td>
       <td><input class="inv-input" id="rl-${p.sku}" type="number" min="0" value="${p.reorderLevel}"></td>
+      <td><span style="color:var(--navy)">${p.suggestedStock}</span> <button class="inv-save" style="background:transparent;color:var(--teal);border:1px solid var(--teal)" onclick="useSuggested('${p.sku}')" title="Fill in the suggested stock & reorder">use</button></td>
       <td>${statusBadge}</td>
-      <td style="color:var(--muted);font-size:12px">${p.lastUpdated ? p.lastUpdated.slice(0,10) : '—'}</td>
       <td><button class="inv-save" onclick="saveStock('${p.sku}')">Save</button> <span class="inv-saved" id="saved-${p.sku}">&#10003;</span></td>
     </tr>`;
   }).join('');
+}
+function useSuggested(sku) {
+  const p = _invData.find(x => x.sku === sku);
+  if (!p) return;
+  const sq = document.getElementById('sq-' + sku), rl = document.getElementById('rl-' + sku);
+  if (sq) sq.value = p.suggestedStock;
+  if (rl) rl.value = p.suggestedReorder;
+  saveStock(sku);
 }
 async function saveStock(sku) {
   const sqEl = document.getElementById('sq-' + sku);
@@ -1418,7 +1477,13 @@ const FC_BLURBS = {
     name: 'Holt-Winters',
     what: 'Tracks three things at once — the current level, the trend, and the repeating yearly season — giving recent months more weight as it updates.',
     assumes: 'That there is both an underlying trend and a yearly seasonal pattern, and that the most recent months are the best guide.',
-    trust: 'Usually the most accurate of the three here because it blends trend and season. It needs a couple of years of history to lock onto the seasonal pattern, which you have.',
+    trust: 'Usually the most accurate of the single models here because it blends trend and season. It needs a couple of years of history to lock onto the seasonal pattern, which you have.',
+  },
+  ensemble: {
+    name: 'Ensemble Blend',
+    what: 'Averages the other three models together, giving more weight to whichever ones have been more accurate in the past.',
+    assumes: 'That no single method is always right, and that blending several independent views cancels out their individual mistakes.',
+    trust: 'A strong default. Because it leans on several models at once, it rarely gets caught badly wrong when one model misreads a month — which is why it usually has the lowest error of all.',
   },
 };
 
@@ -1438,22 +1503,28 @@ async function loadForecast() {
 
 function renderHistChart() {
   const h = _fcData.history;
-  mkChart('chartHist', {
+  const labels = h.map(r => r.month);
+  mkChart('chartHistRev', {
     type:'line',
-    data: {
-      labels: h.map(r => r.month),
-      datasets: [
-        { label:'Revenue', yAxisID:'y', data:h.map(r=>r.revenue),
-          borderColor:'#00B4A0', backgroundColor:'rgba(0,180,160,.10)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
-        { label:'Gross Margin %', yAxisID:'y1', data:h.map(r=>r.margin),
-          borderColor:'#E8622A', backgroundColor:'transparent', fill:false, tension:.3, pointRadius:0, borderWidth:2, spanGaps:true },
-      ]
-    },
+    data: { labels, datasets: [
+      { label:'Revenue', data:h.map(r=>r.revenue),
+        borderColor:'#00B4A0', backgroundColor:'rgba(0,180,160,.10)', fill:true, tension:.3, pointRadius:0, borderWidth:2 },
+    ]},
     options: { ...baseOpts(), interaction:{mode:'index',intersect:false}, scales:{
       x:{ ticks:{color:'#6b7a8d',autoSkip:true,maxTicksLimit:12}, grid:{display:false} },
-      y:{ position:'left', ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'}, title:{display:true,text:'Revenue',color:'#6b7a8d'} },
-      y1:{ position:'right', min:0, max:100, ticks:{callback:v=>v+'%',color:'#E8622A'}, grid:{display:false}, title:{display:true,text:'Margin',color:'#E8622A'} },
-    }, plugins:{ ...baseOpts().plugins, tooltip:{ callbacks:{ label:c=> c.dataset.label==='Revenue' ? ' Revenue: $'+fmt(c.raw) : ' Margin: '+(c.raw==null?'—':c.raw+'%') } } } }
+      y:{ ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} },
+    }, plugins:{ ...baseOpts().plugins, legend:{display:false}, tooltip:{ callbacks:{ label:c=>' Revenue: $'+fmt(c.raw) } } } }
+  });
+  mkChart('chartHistMargin', {
+    type:'line',
+    data: { labels, datasets: [
+      { label:'Gross Margin %', data:h.map(r=>r.margin),
+        borderColor:'#E8622A', backgroundColor:'rgba(232,98,42,.10)', fill:true, tension:.3, pointRadius:0, borderWidth:2, spanGaps:true },
+    ]},
+    options: { ...baseOpts(), interaction:{mode:'index',intersect:false}, scales:{
+      x:{ ticks:{color:'#6b7a8d',autoSkip:true,maxTicksLimit:12}, grid:{display:false} },
+      y:{ min:0, max:100, ticks:{callback:v=>v+'%',color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} },
+    }, plugins:{ ...baseOpts().plugins, legend:{display:false}, tooltip:{ callbacks:{ label:c=>' Margin: '+(c.raw==null?'—':c.raw+'%') } } } }
   });
 }
 
@@ -1477,6 +1548,16 @@ function onHorizonChange() {
     _fcHorizon + (_fcHorizon === 1 ? ' month' : ' months') + ' ahead';
   renderForecastChart();
   renderForecastTitle();
+  renderNext12();
+}
+
+function renderNext12() {
+  const model = _fcData.models.find(m => m.key === _fcModel);
+  const n = model.next12;
+  document.getElementById('fc-next12').innerHTML =
+    `<span class="n12-label">Projected next 12 months</span>` +
+    `<span class="n12-val">$${fmt(n.total)}</span>` +
+    `<span class="n12-range">likely $${fmt(n.lo)} – $${fmt(n.hi)}</span>`;
 }
 
 function renderForecastTitle() {
@@ -1511,7 +1592,7 @@ function renderForecastTitle() {
   document.getElementById('fc-title').innerHTML =
     `${arrow} Revenue is projected to ${dir} about <span style="color:var(--teal)">$${fmt(end.mean)}</span> by ${monthLabel(end.month)}`;
   document.getElementById('fc-sub').textContent =
-    `${model.name} model` + (pctTxt ? ` · ${pctTxt}` : '') + ` · 80% likely range shaded · typical error ±${(model.mape*100).toFixed(0)}%`;
+    `${model.name} model` + (pctTxt ? ` · ${pctTxt}` : '') + ` · 80% & 95% ranges shaded · typical error ±${(model.mape*100).toFixed(0)}%`;
 }
 
 function monthLabel(ym) {
@@ -1526,28 +1607,30 @@ function renderForecastChart() {
   const fc = model.forecast.slice(0, _fcHorizon);
   const nH = hist.length;
   const labels = [...hist.map(h=>h.month), ...fc.map(f=>f.month)];
+  // Each band/forecast series starts at the last actual point so it visually
+  // connects to the history line (band width there is 0).
   const connect = (buildFuture) => hist.map((h,i)=> i===nH-1 ? h.revenue : null).concat(buildFuture);
 
   const histLine = hist.map(h=>h.revenue).concat(fc.map(()=>null));
   const meanLine = connect(fc.map(f=>f.mean));
-  const lowLine  = connect(fc.map(f=>f.lower));
-  const upLine   = connect(fc.map(f=>f.upper));
 
   mkChart('chartForecast', {
     type:'line',
     data:{ labels, datasets:[
-      // band: lower (invisible line) then upper filled down to lower
-      { label:'_band_low', data:lowLine, borderColor:'transparent', pointRadius:0, fill:false },
-      { label:'_band_up',  data:upLine,  borderColor:'transparent', pointRadius:0, fill:'-1', backgroundColor:'rgba(26,122,158,.15)' },
-      { label:'History',   data:histLine, borderColor:'#00B4A0', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, tension:.25 },
-      { label:'Forecast',  data:meanLine, borderColor:'#1A7A9E', backgroundColor:'transparent', borderWidth:2.5, borderDash:[6,4], pointRadius:0, tension:.25 },
+      // Outer 95% band, then inner 80% band (drawn on top, darker).
+      { label:'_b95lo', data:connect(fc.map(f=>f.lo95)), borderColor:'transparent', pointRadius:0, fill:false },
+      { label:'_b95hi', data:connect(fc.map(f=>f.hi95)), borderColor:'transparent', pointRadius:0, fill:'-1', backgroundColor:'rgba(26,122,158,.08)' },
+      { label:'_b80lo', data:connect(fc.map(f=>f.lo80)), borderColor:'transparent', pointRadius:0, fill:false },
+      { label:'_b80hi', data:connect(fc.map(f=>f.hi80)), borderColor:'transparent', pointRadius:0, fill:'-1', backgroundColor:'rgba(26,122,158,.18)' },
+      { label:'History',  data:histLine, borderColor:'#00B4A0', backgroundColor:'transparent', borderWidth:2.5, pointRadius:0, tension:.25 },
+      { label:'Forecast', data:meanLine, borderColor:'#1A7A9E', backgroundColor:'transparent', borderWidth:2.5, borderDash:[6,4], pointRadius:0, tension:.25 },
     ]},
     options:{ ...baseOpts(), interaction:{mode:'index',intersect:false}, scales:{
       x:{ ticks:{color:'#6b7a8d',autoSkip:true,maxTicksLimit:12}, grid:{display:false} },
       y:{ ticks:{callback:v=>'$'+fmt(v),color:'#6b7a8d'}, grid:{color:'rgba(0,0,0,.06)'} },
     }, plugins:{ ...baseOpts().plugins,
-      legend:{ labels:{ color:'#6b7a8d', font:{size:11}, filter:i=>!i.text.startsWith('_band') } },
-      tooltip:{ filter:i=>!i.dataset.label.startsWith('_band'), callbacks:{ label:c=>' '+c.dataset.label+': $'+fmt(c.raw) } }
+      legend:{ labels:{ color:'#6b7a8d', font:{size:11}, filter:i=>!i.text.startsWith('_b') } },
+      tooltip:{ filter:i=>!i.dataset.label.startsWith('_b'), callbacks:{ label:c=>' '+c.dataset.label+': $'+fmt(c.raw) } }
     } }
   });
 }
@@ -1577,7 +1660,7 @@ function sortTable(key, col, type) {
     if (key==='orders') return [item.OrderID,item.OrderDate,item.customerName,item.country,item.Channel,parseFloat(item.OrderTotal)][col];
     if (key==='cust')   return [item.CustomerID,item.FirstName+' '+item.LastName,item.Country,item.CustomerType,item.loyalty?'Yes':'No',item.orderCount,parseFloat(item.lifetimeValue),item.lastOrder][col];
     if (key==='prod')   return [item.sku,item.name,item.category,item.units,item.revenue,item.margin][col];
-    if (key==='inv')    return [item.sku,item.name,item.category,item.stockQty??-1,item.reorderLevel??-1,item.status][col];
+    if (key==='inv')    return [item.sku,item.name,item.category,item.forecastUnits??-1,item.stockQty??-1,item.reorderLevel??-1,item.suggestedStock??-1,item.status][col];
     if (key==='promo')  return [item.PromoCode,item.PromoName,item.PromoType,parseFloat(item.DiscountPct||0),item.Channel,item.orderCount,parseFloat(item.revenue),parseFloat(item.revenue)-parseFloat(item.sacrificed),parseFloat(item.avgOrder)][col];
     return '';
   }
@@ -1651,7 +1734,7 @@ async function autoFillInventory() {
   btn.disabled = true;
   try {
     const d = await apiPost('auto_inventory', {});
-    btn.textContent = '&#10003; Done — ' + d.updated + ' products updated';
+    btn.textContent = '✓ Done — ' + d.updated + ' products set to forecast levels';
     _loaded['inventory'] = false;
     loadInventory();
     _bannerDismissed = false;
@@ -1659,7 +1742,7 @@ async function autoFillInventory() {
   } catch (e) {
     btn.textContent = 'Error: ' + e.message;
   }
-  setTimeout(() => { btn.textContent = '&#9654; Auto-fill from 2025 Sales'; btn.disabled = false; }, 3000);
+  setTimeout(() => { btn.textContent = '▶ Apply Forecast-Based Stock Levels'; btn.disabled = false; }, 3000);
 }
 
 function fmt(v) {
