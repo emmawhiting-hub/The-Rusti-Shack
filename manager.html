@@ -126,6 +126,17 @@
   .fc-info-section{margin-bottom:16px}
   .fc-info-section h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
   .fc-info-section p{font-size:13px;line-height:1.5;color:var(--text)}
+
+  /* Inventory: reorder callout + methodology note */
+  .reorder-callout{display:none;align-items:center;gap:10px;background:#fff3e0;border:1px solid var(--orange);border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px}
+  .reorder-callout.visible{display:flex}
+  .reorder-callout .rc-icon{font-size:16px;color:var(--orange)}
+  .reorder-callout strong{color:var(--orange-dk)}
+  .reorder-callout .rc-link{margin-left:auto;color:var(--navy);text-decoration:underline;cursor:pointer;font-weight:600;white-space:nowrap}
+  .inv-note{display:flex;align-items:flex-start;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .inv-note-icon{color:var(--navy);font-size:15px;line-height:1.3}
+  .inv-note-link{color:var(--teal);cursor:pointer;white-space:nowrap;font-weight:600}
+  .btn-sm.active{background:var(--orange);border-color:var(--orange);color:#fff}
   table{width:100%;border-collapse:collapse}
   th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
   th:hover{color:var(--teal)}
@@ -419,6 +430,16 @@
       </div>
       <div id="inventory-loading" class="spinner"></div>
       <div id="inventory-content" style="display:none">
+        <!-- Reorder callout + always-visible methodology note -->
+        <div id="reorder-callout" class="reorder-callout"></div>
+        <div class="inv-note">
+          <span class="inv-note-icon">&#9432;</span>
+          <span><strong>How reorder points are set:</strong> each item's reorder point is about two weeks of expected
+          sales plus a safety buffer sized to how much its sales swing month to month — so you restock before running
+          out. An item is flagged to reorder once its stock falls to that point.</span>
+          <a class="inv-note-link" onclick="openInventoryInfo()">Full explanation &#8594;</a>
+        </div>
+
         <div class="kpi-grid" id="inv-kpis"></div>
 
         <div class="chart-row cols-1">
@@ -435,6 +456,7 @@
         <div class="table-card">
           <div class="table-toolbar">
             <h3 id="inv-count"></h3>
+            <button class="btn-sm" id="reorder-filter-btn" onclick="toggleReorderOnly()">&#9873; Show reorder list</button>
             <div class="spacer"></div>
             <input class="search-box" type="text" placeholder="Search SKU or name&#8230;" id="inv-search" oninput="filterInventory()">
           </div>
@@ -633,6 +655,42 @@
       <button class="modal-close" onclick="closeForecastInfo()">&#x2715;</button>
     </div>
     <div class="modal-body" id="fc-info-body"></div>
+  </div>
+</div>
+
+<!-- Inventory reorder-point methodology modal -->
+<div class="modal-overlay" id="inv-info-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-head">
+      <h2>How reorder points &amp; stock levels are set</h2>
+      <button class="modal-close" onclick="closeInventoryInfo()">&#x2715;</button>
+    </div>
+    <div class="modal-body">
+      <div class="fc-info-section"><h4>What a reorder point is</h4>
+        <p>The reorder point is the stock level at which you should place a new order. Set it right and a fresh
+        shipment arrives just as you're about to run out — you avoid empty shelves without overstocking.</p></div>
+      <div class="fc-info-section"><h4>The formula</h4>
+        <p><strong>Reorder point = lead-time demand + safety stock.</strong> Lead-time demand is how much you expect
+        to sell while you wait for the restock to arrive; safety stock is a cushion for weeks that sell more than
+        usual.</p></div>
+      <div class="fc-info-section"><h4>Lead-time demand</h4>
+        <p>We assume it takes about two weeks to restock, so lead-time demand is roughly half of the item's forecast
+        for the coming month.</p></div>
+      <div class="fc-info-section"><h4>Safety stock</h4>
+        <p>Sized to how much the item's monthly sales bounce around: <strong>1.28 × its month-to-month sales
+        swing</strong> (the standard deviation of recent monthly units). Steady sellers get a small cushion; erratic
+        ones get a bigger one. The 1.28 targets about a <strong>90% chance</strong> of not running out while you wait
+        on a restock.</p></div>
+      <div class="fc-info-section"><h4>Suggested stock level</h4>
+        <p>The "Suggested" figure is roughly <strong>one month of forecast demand plus the safety stock</strong> —
+        enough to comfortably cover a normal month between orders.</p></div>
+      <div class="fc-info-section"><h4>Where the demand forecast comes from</h4>
+        <p>Each item's expected monthly sales are its <strong>recent average, adjusted by its own seasonal
+        pattern</strong> — so a sunscreen's summer bump or a wetsuit's winter dip is baked in.</p></div>
+      <div class="fc-info-section"><h4>What the flags mean</h4>
+        <p><strong>Stockout</strong> — nothing on the shelf, reorder immediately. <strong>Reorder</strong> — at or
+        below the reorder point, time to restock. <strong>OK</strong> — comfortably above it.</p></div>
+    </div>
   </div>
 </div>
 
@@ -1232,25 +1290,64 @@ function renderProdsTable() {
 }
 
 // ── Inventory ────────────────────────────────────────────────────────
-let _invData = [], _invFiltered = [];
+let _invData = [], _invFiltered = [], _invReorderOnly = false, _invForecastMonth = null;
 async function loadInventory() {
   show('inventory-loading'); hide('inventory-content');
   try {
     const d = await api({ section: 'inventory' });
     _invData = d.products || []; _invFiltered = [..._invData];
+    _invForecastMonth = d.forecastMonth || null;
+    _invReorderOnly = false;
+    const fbtn = document.getElementById('reorder-filter-btn');
+    fbtn.classList.remove('active'); fbtn.innerHTML = '&#9873; Show reorder list';
     hide('inventory-loading'); show('inventory-content');
-    const moLabel = d.forecastMonth ? monthLabel(d.forecastMonth) : 'next month';
-    document.getElementById('inv-kpis').innerHTML = `
-      <div class="kpi coral"><div class="kpi-label">Stockouts</div><div class="kpi-value">${d.stockouts}</div><div class="kpi-sub">Stock = 0</div></div>
-      <div class="kpi gold"><div class="kpi-label">Low Stock</div><div class="kpi-value">${d.lowStock}</div><div class="kpi-sub">At or below reorder level</div></div>
-      <div class="kpi coral"><div class="kpi-label">Under Forecast</div><div class="kpi-value">${d.underStocked}</div><div class="kpi-sub">Stock below ${moLabel} demand</div></div>
-      <div class="kpi"><div class="kpi-label">Untracked</div><div class="kpi-value">${d.untracked}</div><div class="kpi-sub">No qty entered yet</div></div>
-    `;
     document.getElementById('topdemand-title').textContent =
-      'Highest Forecast Demand — ' + moLabel;
+      'Highest Forecast Demand — ' + (_invForecastMonth ? monthLabel(_invForecastMonth) : 'Next Month');
+    refreshInvSummary();
     renderTopDemandChart(d.topDemand || []);
     renderInvTable();
   } catch (e) { document.getElementById('inventory-loading').innerHTML = err(e); }
+}
+
+// Recompute the KPI cards and reorder callout from current local data (so a
+// single Save updates them without a full reload).
+function refreshInvSummary() {
+  const moLabel = _invForecastMonth ? monthLabel(_invForecastMonth) : 'next month';
+  const stockouts   = _invData.filter(p => p.status === 'stockout').length;
+  const low         = _invData.filter(p => p.status === 'low').length;
+  const untracked   = _invData.filter(p => p.status === 'untracked').length;
+  const underStock  = _invData.filter(p => p.stockQty != null && p.forecastUnits > 0 && p.stockQty < p.forecastUnits).length;
+  const reorderCount = stockouts + low;
+  document.getElementById('inv-kpis').innerHTML = `
+    <div class="kpi coral"><div class="kpi-label">Reorder Now</div><div class="kpi-value">${reorderCount}</div><div class="kpi-sub">At or below reorder point</div></div>
+    <div class="kpi coral"><div class="kpi-label">Stockouts</div><div class="kpi-value">${stockouts}</div><div class="kpi-sub">Stock = 0</div></div>
+    <div class="kpi coral"><div class="kpi-label">Under Forecast</div><div class="kpi-value">${underStock}</div><div class="kpi-sub">Stock below ${moLabel} demand</div></div>
+    <div class="kpi"><div class="kpi-label">Untracked</div><div class="kpi-value">${untracked}</div><div class="kpi-sub">No qty entered yet</div></div>`;
+  const rc = document.getElementById('reorder-callout');
+  if (reorderCount > 0) {
+    rc.innerHTML = `<span class="rc-icon">&#9873;</span>` +
+      `<span><strong>${reorderCount} item${reorderCount!==1?'s':''}</strong> ${reorderCount!==1?'are':'is'} at or below the reorder point and should be restocked soon.</span>` +
+      `<span class="rc-link" onclick="showReorderList()">Show reorder list &#8594;</span>`;
+    rc.classList.add('visible');
+  } else {
+    rc.classList.remove('visible');
+  }
+}
+
+function openInventoryInfo() { document.getElementById('inv-info-modal').classList.add('open'); }
+function closeInventoryInfo() { document.getElementById('inv-info-modal').classList.remove('open'); }
+document.getElementById('inv-info-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeInventoryInfo(); });
+
+function toggleReorderOnly() {
+  _invReorderOnly = !_invReorderOnly;
+  const btn = document.getElementById('reorder-filter-btn');
+  btn.classList.toggle('active', _invReorderOnly);
+  btn.innerHTML = _invReorderOnly ? '&#9873; Showing reorder list' : '&#9873; Show reorder list';
+  filterInventory();
+}
+function showReorderList() {
+  if (!_invReorderOnly) toggleReorderOnly();
+  document.querySelector('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderTopDemandChart(top) {
@@ -1271,14 +1368,18 @@ function renderTopDemandChart(top) {
 }
 function filterInventory() {
   const q = document.getElementById('inv-search').value.toLowerCase();
-  _invFiltered = _invData.filter(p => (p.sku||'').toLowerCase().includes(q)||(p.name||'').toLowerCase().includes(q));
+  _invFiltered = _invData.filter(p => {
+    const matchQ = (p.sku||'').toLowerCase().includes(q) || (p.name||'').toLowerCase().includes(q);
+    const matchR = !_invReorderOnly || p.status === 'low' || p.status === 'stockout';
+    return matchQ && matchR;
+  });
   renderInvTable();
 }
 function renderInvTable() {
   document.getElementById('inv-count').textContent = _invFiltered.length + ' products';
   document.getElementById('inv-body').innerHTML = _invFiltered.map(p => {
     const statusBadge = p.status === 'stockout'  ? '<span class="badge badge-coral">Stockout</span>'
-                      : p.status === 'low'        ? '<span class="badge badge-gold">Low Stock</span>'
+                      : p.status === 'low'        ? '<span class="badge badge-gold">Reorder</span>'
                       : p.status === 'untracked'  ? '<span class="badge badge-grey">Untracked</span>'
                       : '<span class="badge badge-teal">OK</span>';
     const stockVal    = p.stockQty != null ? p.stockQty : '';
@@ -1322,12 +1423,7 @@ async function saveStock(sku) {
     }
     const saved = document.getElementById('saved-' + sku);
     if (saved) { saved.style.display = 'inline'; setTimeout(() => saved.style.display = 'none', 2000); }
-    // Refresh KPIs
-    const d = { stockouts: _invData.filter(x=>x.status==='stockout').length, lowStock: _invData.filter(x=>x.status==='low').length, untracked: _invData.filter(x=>x.status==='untracked').length };
-    document.getElementById('inv-kpis').innerHTML = `
-      <div class="kpi coral"><div class="kpi-label">Stockouts</div><div class="kpi-value">${d.stockouts}</div><div class="kpi-sub">Stock = 0</div></div>
-      <div class="kpi gold"><div class="kpi-label">Low Stock</div><div class="kpi-value">${d.lowStock}</div><div class="kpi-sub">At or below reorder level</div></div>
-      <div class="kpi"><div class="kpi-label">Untracked</div><div class="kpi-value">${d.untracked}</div><div class="kpi-sub">No qty entered yet</div></div>`;
+    refreshInvSummary();
   } catch (e) { alert('Save failed: ' + e.message); }
 }
 
