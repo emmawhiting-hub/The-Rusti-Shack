@@ -143,6 +143,35 @@
   .inv-note-icon{color:var(--navy);font-size:15px;line-height:1.3}
   .inv-note-link{color:var(--teal);cursor:pointer;white-space:nowrap;font-weight:600}
   .btn-sm.active{background:var(--orange);border-color:var(--orange);color:#fff}
+
+  /* Ask the Data chat */
+  .ask-wrap{max-width:900px}
+  .ask-messages{display:flex;flex-direction:column;gap:14px;margin-bottom:14px;min-height:120px}
+  .ask-msg{max-width:88%;padding:12px 16px;border-radius:14px;font-size:14px;line-height:1.55}
+  .ask-msg.user{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px}
+  .ask-msg.bot{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px;width:88%}
+  .ask-msg.bot p{margin:0 0 8px}.ask-msg.bot p:last-child{margin-bottom:0}
+  .ask-msg.bot ul{margin:4px 0 8px 18px}
+  .ask-msg.bot code{background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px}
+  .ask-tbl{width:auto;border-collapse:collapse;margin:8px 0;font-size:13px}
+  .ask-tbl th,.ask-tbl td{border:1px solid var(--border);padding:5px 10px;text-align:left}
+  .ask-tbl th{background:var(--surface2);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .ask-meta{font-size:11px;color:var(--muted2);margin-top:8px}
+  .ask-chart{margin-top:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px}
+  .ask-chart-title{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px}
+  .ask-numbers{display:flex;gap:12px;flex-wrap:wrap}
+  .ask-num{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:120px}
+  .ask-num .n-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .ask-num .n-val{font-size:20px;font-weight:800;color:var(--navy-dark)}
+  .ask-suggestions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .ask-chip{padding:6px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-size:12px}
+  .ask-chip:hover{border-color:var(--teal);color:var(--teal)}
+  .ask-input-row{display:flex;gap:10px;align-items:flex-end}
+  .ask-input{flex:1;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-family:inherit;resize:none;max-height:140px}
+  .ask-input:focus{outline:none;border-color:var(--teal)}
+  .ask-send{padding:12px 22px;border-radius:10px;border:none;background:var(--orange);color:#fff;font-weight:700;cursor:pointer;font-size:14px}
+  .ask-send:hover{background:var(--orange-dk)}.ask-send:disabled{opacity:.5;cursor:default}
+  .ask-thinking{align-self:flex-start;color:var(--muted);font-size:13px;font-style:italic}
   table{width:100%;border-collapse:collapse}
   th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
   th:hover{color:var(--teal)}
@@ -233,6 +262,7 @@
   <div class="sidebar">
     <div class="nav-section">Analytics</div>
     <div class="nav-item active" data-section="dashboard"><span class="icon">&#9679;</span> Dashboard</div>
+    <div class="nav-item" data-section="ask"><span class="icon">&#9788;</span> Ask the Data</div>
     <div class="nav-section">Operations</div>
     <div class="nav-item" data-section="orders"><span class="icon">&#9679;</span> Orders</div>
     <div class="nav-item" data-section="customers"><span class="icon">&#9679;</span> Customers</div>
@@ -748,6 +778,35 @@
       </div>
     </div>
 
+    <!-- Ask the Data (AI assistant) -->
+    <div class="section" id="sec-ask">
+      <div class="section-header">
+        <div class="section-title">Ask the Data</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="ask-cost" style="font-size:12px;color:var(--muted)">$0.00000 this session</span>
+          <select id="ask-model" class="search-box" style="width:auto">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+          </select>
+          <button class="btn-sm" onclick="askReset()">New chat</button>
+        </div>
+      </div>
+      <div class="ask-wrap">
+        <div class="inv-note" style="margin:0 0 12px 0">
+          <span class="inv-note-icon">&#9432;</span>
+          <span>Ask about your shop in plain English — it answers only from your own data using read-only queries,
+          never sees customer names or contact details, and can't change anything. Every number comes from a real query.</span>
+        </div>
+        <div id="ask-messages" class="ask-messages"></div>
+        <div id="ask-suggestions" class="ask-suggestions"></div>
+        <div class="ask-input-row">
+          <textarea id="ask-input" class="ask-input" rows="1" placeholder="e.g. Which country's customers spend the most? Chart it." onkeydown="askKey(event)"></textarea>
+          <button class="ask-send" id="ask-send" onclick="askSend()">Ask</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -930,6 +989,7 @@ async function loadSection(sec) {
   if (sec === 'promos')     await loadPromos();
   if (sec === 'financials') await loadFinancials();
   if (sec === 'forecast')   await loadForecast();
+  if (sec === 'ask')        loadAsk();
   _loaded[sec] = true;
 }
 
@@ -2189,6 +2249,134 @@ function openForecastInfo() {
 }
 function closeForecastInfo() { document.getElementById('fc-info-modal').classList.remove('open'); }
 document.getElementById('fc-info-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeForecastInfo(); });
+
+// ── Ask the Data (AI assistant) ─────────────────────────────────────
+let _askHistory = [], _askCost = 0, _askChartSeq = 0;
+
+function loadAsk() {
+  if (!document.getElementById('ask-messages').children.length) {
+    const sugg = [
+      'Which country’s customers spend the most? Chart it.',
+      'Top 10 products by revenue',
+      'How did this summer compare to last summer?',
+      'Which products are most often bought together?',
+      'Revenue by channel as a pie chart',
+    ];
+    document.getElementById('ask-suggestions').innerHTML = sugg.map(s => `<span class="ask-chip" onclick="askChip(this)">${s}</span>`).join('');
+  }
+  setTimeout(() => { const i = document.getElementById('ask-input'); if (i) i.focus(); }, 50);
+}
+function askChip(el) { document.getElementById('ask-input').value = el.textContent; askSend(); }
+function askKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askSend(); return; }
+  const t = e.target; setTimeout(() => { t.style.height = 'auto'; t.style.height = Math.min(140, t.scrollHeight) + 'px'; }, 0);
+}
+function askReset() {
+  _askHistory = []; _askCost = 0;
+  document.getElementById('ask-messages').innerHTML = '';
+  document.getElementById('ask-cost').textContent = '$0.00000 this session';
+  loadAsk();
+}
+function scrollAsk() { const m = document.querySelector('.main'); if (m) m.scrollTop = m.scrollHeight; }
+
+function mdEscape(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Safe subset markdown: escape first, then bold/italic/code, bullet lists,
+// headings, and pipe tables. No raw HTML from the model ever reaches innerHTML.
+function renderAskMarkdown(md) {
+  const lines = mdEscape(md).split('\n');
+  const inline = t => t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*(?!\*)(.+?)\*/g,'$1<em>$2</em>').replace(/`(.+?)`/g,'<code>$1</code>');
+  let html = '', i = 0, inList = false;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|[-:\s|]+\|\s*$/.test(lines[i+1])) {
+      const header = line.split('|').slice(1,-1).map(c => c.trim());
+      i += 2; const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i].split('|').slice(1,-1).map(c => c.trim())); i++; }
+      html += '<table class="ask-tbl"><thead><tr>' + header.map(h => '<th>'+inline(h)+'</th>').join('') + '</tr></thead><tbody>' +
+        rows.map(r => '<tr>' + r.map(c => '<td>'+inline(c)+'</td>').join('') + '</tr>').join('') + '</tbody></table>';
+      continue;
+    }
+    if (/^\s*[-*]\s+/.test(line)) { if (!inList) { html += '<ul>'; inList = true; } html += '<li>'+inline(line.replace(/^\s*[-*]\s+/,''))+'</li>'; i++; continue; }
+    if (inList) { html += '</ul>'; inList = false; }
+    if (/^\s*#{1,4}\s+/.test(line)) { html += '<p style="font-weight:700">'+inline(line.replace(/^\s*#{1,4}\s+/,''))+'</p>'; i++; continue; }
+    if (line.trim() === '') { i++; continue; }
+    html += '<p>'+inline(line)+'</p>'; i++;
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function appendAskMsg(role, html) {
+  const d = document.createElement('div');
+  d.className = 'ask-msg ' + (role === 'user' ? 'user' : 'bot');
+  d.innerHTML = html;
+  document.getElementById('ask-messages').appendChild(d);
+  scrollAsk();
+  return d;
+}
+
+function renderAskChart(host, spec) {
+  const fmtVal = v => spec.unit === 'currency' ? '$' + fmt(v) : spec.unit === 'percent' ? (v + '%') : (typeof v === 'number' ? v.toLocaleString() : v);
+  const wrap = document.createElement('div'); wrap.className = 'ask-chart';
+  if (spec.title) { const t = document.createElement('div'); t.className = 'ask-chart-title'; t.textContent = spec.title; wrap.appendChild(t); }
+  if (spec.type === 'number') {
+    const nums = document.createElement('div'); nums.className = 'ask-numbers';
+    spec.labels.forEach((lb, i) => { const c = document.createElement('div'); c.className = 'ask-num'; c.innerHTML = '<div class="n-label"></div><div class="n-val"></div>'; c.querySelector('.n-label').textContent = lb; c.querySelector('.n-val').textContent = fmtVal(spec.values[i]); nums.appendChild(c); });
+    wrap.appendChild(nums); host.appendChild(wrap); scrollAsk(); return;
+  }
+  const cv = document.createElement('canvas'); const id = 'askchart-' + (++_askChartSeq); cv.id = id;
+  const cwrap = document.createElement('div'); cwrap.style.height = '270px'; cwrap.style.position = 'relative'; cwrap.appendChild(cv);
+  wrap.appendChild(cwrap); host.appendChild(wrap);
+  const palette = ['#00B4A0','#1A7A9E','#E8622A','#D99A2A','#F4845F','#0F5E7A','#00a08e','#c94e1e','#9aabbf','#1A7A9E','#00B4A0','#E8622A','#D99A2A','#F4845F','#6b7a8d'];
+  const colors = (spec.colors && spec.colors.length === spec.values.length) ? spec.colors : spec.labels.map((_, i) => palette[i % palette.length]);
+  if (spec.type === 'bar') {
+    mkChart(id, { type:'bar', data:{ labels:spec.labels, datasets:[{ data:spec.values, backgroundColor:colors, borderRadius:4 }] },
+      options:{ ...baseOpts(), indexAxis:'y', plugins:{ ...baseOpts().plugins, legend:{display:false}, tooltip:{ callbacks:{ label:c=>' '+fmtVal(c.raw) } } },
+        scales:{ x:{ ticks:{ callback:v=>fmtVal(v), color:'#6b7a8d' }, grid:{ color:'rgba(0,0,0,.06)' } }, y:{ ticks:{ color:'#6b7a8d', font:{size:11} }, grid:{ display:false } } } } });
+  } else if (spec.type === 'pie') {
+    mkChart(id, { type:'pie', data:{ labels:spec.labels, datasets:[{ data:spec.values, backgroundColor:colors, borderWidth:0 }] },
+      options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, legend:{ position:'right', labels:{ color:'#6b7a8d', boxWidth:12, font:{size:11} } }, tooltip:{ callbacks:{ label:c=>' '+c.label+': '+fmtVal(c.raw) } } } } });
+  } else if (spec.type === 'line') {
+    mkChart(id, { type:'line', data:{ labels:spec.labels, datasets:[{ data:spec.values, borderColor:'#00B4A0', backgroundColor:'rgba(0,180,160,.10)', fill:true, tension:.3, pointRadius:0, borderWidth:2 }] },
+      options:{ ...baseOpts(), plugins:{ ...baseOpts().plugins, legend:{display:false}, tooltip:{ callbacks:{ label:c=>' '+fmtVal(c.raw) } } },
+        scales:{ x:{ ticks:{ color:'#6b7a8d', autoSkip:true, maxTicksLimit:12 }, grid:{ display:false } }, y:{ ticks:{ callback:v=>fmtVal(v), color:'#6b7a8d' }, grid:{ color:'rgba(0,0,0,.06)' } } } } });
+  }
+  scrollAsk();
+}
+
+async function askSend() {
+  const inp = document.getElementById('ask-input');
+  const q = inp.value.trim(); if (!q) return;
+  inp.value = ''; inp.style.height = 'auto';
+  document.getElementById('ask-suggestions').innerHTML = '';
+  appendAskMsg('user', mdEscape(q));
+  const send = document.getElementById('ask-send'); send.disabled = true;
+  const thinking = document.createElement('div'); thinking.className = 'ask-thinking'; thinking.textContent = 'Thinking…';
+  document.getElementById('ask-messages').appendChild(thinking); scrollAsk();
+  try {
+    const r = await fetch('/api/assistant', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-manager-token': _token },
+      body: JSON.stringify({ question: q, history: _askHistory, model: document.getElementById('ask-model').value }),
+    });
+    const d = await r.json();
+    thinking.remove();
+    if (d.error && !d.answer) { appendAskMsg('bot', '<p style="color:var(--coral)">' + mdEscape(d.error) + '</p>'); }
+    else {
+      const el = appendAskMsg('bot', renderAskMarkdown(d.answer || ''));
+      if (d.charts && d.charts.length) d.charts.forEach(c => renderAskChart(el, c));
+      if (d.configured !== false) {
+        const meta = document.createElement('div'); meta.className = 'ask-meta';
+        meta.textContent = `${d.steps || 0} data step${d.steps === 1 ? '' : 's'} · ${(d.model || '').replace('gemini-', 'Gemini ')} · est. $${(d.costUsd || 0).toFixed(5)}`;
+        el.appendChild(meta);
+      }
+      _askHistory.push({ role: 'user', text: q });
+      _askHistory.push({ role: 'model', text: d.answer || '' });
+      _askCost += (d.costUsd || 0);
+      document.getElementById('ask-cost').textContent = '$' + _askCost.toFixed(5) + ' this session';
+    }
+  } catch (e) { thinking.remove(); appendAskMsg('bot', '<p style="color:var(--coral)">Request failed: ' + mdEscape(e.message) + '</p>'); }
+  send.disabled = false; scrollAsk();
+}
 
 // ── Sort ────────────────────────────────────────────────────────────
 const _sortState = {};
