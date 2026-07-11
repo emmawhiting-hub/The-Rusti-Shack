@@ -7,6 +7,28 @@ const SUPABASE_URL = 'https://tukwikdsvjqlyyegdaak.supabase.co';
 // Rusti's existing in-store IDs (which use C01001–C09999).
 const WEB_CUSTOMER_ID_START = 10001;
 
+// The order code is assigned HERE, server-side, from the current DB max — NOT
+// in the browser. The old client-side localStorage counter started at 50005 and
+// reset per-browser, minting codes (ORD050006+) that landed on top of the
+// historical dataset (which fills ORD050006–ORD066198), so the webhook's
+// primary-key insert silently failed and paid orders were lost.
+//
+// Taking global max + 1 puts every new web order ABOVE the entire existing
+// range, so it can never collide with historical data. OrderIDs are fixed-width
+// "ORD" + 6 digits, so lexicographic order equals numeric order.
+const ORDER_SEED = 50005;
+
+async function nextWebOrderCode(supabase) {
+  const { data, error } = await supabase
+    .from('Orders')
+    .select('OrderID')
+    .order('OrderID', { ascending: false })
+    .limit(1);
+  if (error) throw new Error('OrderID lookup: ' + error.message);
+  const lastNum = data && data.length ? parseInt(data[0].OrderID.slice(3), 10) : ORDER_SEED;
+  return 'ORD' + String(lastNum + 1).padStart(6, '0');
+}
+
 async function resolveCustomerId(supabase, email, firstName, lastName, loyalty) {
   // Look up by email — one person, one ID
   const { data: existing } = await supabase
@@ -101,7 +123,8 @@ module.exports = async function handler(req, res) {
     return res.status(405).send('Method Not Allowed');
   }
 
-  const { cartItems, customer, orderCode } = req.body || {};
+  // orderCode from the client is ignored — it is assigned server-side below.
+  const { cartItems, customer } = req.body || {};
 
   const errors = [];
 
@@ -128,10 +151,6 @@ module.exports = async function handler(req, res) {
     if (customer.postalCode && customer.postalCode.length > 20)  errors.push('invalid postalCode');
   }
 
-  if (!isValidString(orderCode, 20) || !/^ORD\d{6}$/.test(orderCode)) {
-    errors.push('invalid orderCode');
-  }
-
   if (errors.length) {
     console.error('Checkout validation failed:', errors);
     return res.status(400).send('Invalid request');
@@ -141,10 +160,23 @@ module.exports = async function handler(req, res) {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     const siteOrigin = origin || ALLOWED_ORIGINS[0];
 
+    const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+
+    // Assign the order code server-side from the current DB max. This must
+    // succeed — a code that isn't unique would silently fail the webhook's
+    // primary-key insert and lose a paid order — so a failure here aborts the
+    // checkout BEFORE any charge is made.
+    let orderCode;
+    try {
+      orderCode = await nextWebOrderCode(supabase);
+    } catch (dbErr) {
+      console.error('Order code assignment failed:', dbErr.message);
+      return res.status(500).send('Payment setup failed. Please try again.');
+    }
+
     // Resolve or create customer — never duplicate on email
     let customerId = null;
     try {
-      const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
       customerId = await resolveCustomerId(
         supabase,
         customer.email,
@@ -202,7 +234,7 @@ module.exports = async function handler(req, res) {
       cancel_url:  `${siteOrigin}/`,
     });
 
-    return res.status(200).json({ url: session.url });
+    return res.status(200).json({ url: session.url, orderCode });
 
   } catch (err) {
     console.error('Stripe session creation failed:', err.message);

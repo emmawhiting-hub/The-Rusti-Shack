@@ -27,28 +27,47 @@ async function writeOrder(supabase, session) {
   const total      = session.amount_total / 100;
   const cartItems  = JSON.parse(meta.cart || '[]');
 
-  const { error: orderErr } = await supabase.from('Orders').insert({
-    OrderID:        orderCode,
-    OrderDate:      new Date().toISOString().split('T')[0],
-    CustID:         customerId,
-    LocationID:     'SHIP-INTL',
-    SalesAssociate: 'WEB',
-    Channel:        'Shipping',
-    ShippingFee:    SHIPPING_FEE_USD,
-    OrderTotal:     total,
-    PaymentMethod:  'Card',
-  });
-  if (orderErr) throw new Error('Orders insert: ' + orderErr.message);
+  if (!orderCode) throw new Error('missing orderCode in session metadata');
 
+  // Idempotency — Stripe may deliver (or we may retry) the same event more than
+  // once. Never double-write or fail on a re-delivery: if this order is already
+  // fully recorded, we're done; if the header exists but lines are missing (a
+  // prior partial write), fall through and finish only the lines.
+  const { data: existing } = await supabase.from('Orders').select('OrderID').eq('OrderID', orderCode).maybeSingle();
+  let freshOrder = false;
+  if (existing) {
+    const { data: existingLines } = await supabase.from('OrderLines').select('LineNumber').eq('OrderID', orderCode).limit(1);
+    if (existingLines && existingLines.length) {
+      console.log(`Order ${orderCode} already recorded — skipping`);
+      return;
+    }
+    console.warn(`Order ${orderCode} exists without lines — completing line write`);
+  } else {
+    const { error: orderErr } = await supabase.from('Orders').insert({
+      OrderID:        orderCode,
+      OrderDate:      new Date().toISOString().split('T')[0],
+      CustID:         customerId,
+      LocationID:     'SHIP-INTL',
+      SalesAssociate: 'WEB',
+      Channel:        'Shipping',
+      ShippingFee:    SHIPPING_FEE_USD,
+      OrderTotal:     total,
+      PaymentMethod:  'Card',
+    });
+    if (orderErr) throw new Error('Orders insert: ' + orderErr.message);
+    freshOrder = true;
+  }
+
+  // Build every line, then insert them in one call. LineRevenue is a generated
+  // column; LineCost is not, so we set it here from the SKU's historical cost
+  // ratio (otherwise web orders inflate gross margin to 100% in financials).
+  const lineRows = [];
   for (let i = 0; i < cartItems.length; i++) {
     const { sku, qty } = cartItems[i];
     const unitPrice = PRODUCT_PRICES[sku] || 0;
-    // LineRevenue is a generated column; LineCost is not, so set it here from
-    // the SKU's historical cost ratio. Without this, web orders would have a
-    // null LineCost and inflate gross margin to 100% in the financials view.
     const lineRevenue = unitPrice * qty;
     const lineCost = +(lineRevenue * await costRatioForSku(supabase, sku)).toFixed(2);
-    const { error: lineErr } = await supabase.from('OrderLines').insert({
+    lineRows.push({
       OrderID:     orderCode,
       LineNumber:  i + 1,
       ProductCode: sku,
@@ -57,10 +76,19 @@ async function writeOrder(supabase, session) {
       DiscountPct: 0,
       LineCost:    lineCost,
     });
-    if (lineErr) console.error('OrderLines insert error:', lineErr.message);
+  }
+  if (lineRows.length) {
+    // upsert so a retry that re-runs the line write can't duplicate-key.
+    const { error: lineErr } = await supabase.from('OrderLines')
+      .upsert(lineRows, { onConflict: 'OrderID,LineNumber' });
+    // A line failure must NOT be swallowed — throw so the handler returns non-2xx
+    // and Stripe retries, rather than leaving an order with no items.
+    if (lineErr) throw new Error('OrderLines insert: ' + lineErr.message);
   }
 
-  await decrementInventory(supabase, cartItems);
+  // Only decrement on the first write of a fresh order, so a retry that just
+  // finishes the lines doesn't double-count stock.
+  if (freshOrder) await decrementInventory(supabase, cartItems);
 
   console.log(`Order written to DB: ${orderCode} | customer: ${customerId} | total: ${total}`);
 }
@@ -152,7 +180,11 @@ async function handler(req, res) {
       await writeOrder(supabase, session);
     } catch (dbErr) {
       console.error('Order DB write failed:', dbErr.message);
-      // Still return 200 so Stripe doesn't retry — order is paid, we log the failure
+      // Return 500 so Stripe retries (up to ~3 days). writeOrder is idempotent,
+      // so a retry after a transient DB failure completes the order rather than
+      // leaving the customer charged with nothing recorded. Do NOT mark the
+      // event processed — the retry must be allowed to run.
+      return res.status(500).send('DB write failed');
     }
   }
 

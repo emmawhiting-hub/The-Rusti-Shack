@@ -1,12 +1,5 @@
 const SHIPPING_FEE_USD = 12.00;
 
-function generateOrderCode() {
-  const seq = parseInt(localStorage.getItem('rusti_order_seq') || '50005');
-  const next = seq + 1;
-  localStorage.setItem('rusti_order_seq', next);
-  return 'ORD' + String(next).padStart(6, '0');
-}
-
 function showCheckoutView() {
   closeCart();
   if (!cart.length) { showToast('Your cart is empty'); return; }
@@ -111,8 +104,6 @@ async function submitCheckout(e) {
     loyalty:       f.loyalty.checked,
   };
 
-  const orderCode = generateOrderCode();
-
   // §5 — send only SKUs and quantities; the server looks up every price
   const cartSnapshot = cart.map(item => ({
     sku:   item.parentSku || item.sku,  // server prices are keyed on parent SKU
@@ -124,9 +115,11 @@ async function submitCheckout(e) {
   }));
 
   // Keep a minimal order record in localStorage so the success page can greet
-  // the customer by name. PII is cleared as soon as the success page renders.
+  // the customer by name. The authoritative orderCode is assigned by the server
+  // (see create-checkout-session) and filled in once the response returns — the
+  // browser must never mint its own code, or two browsers collide on OrderID.
   const pendingOrder = {
-    orderCode,
+    orderCode:   null,
     date:        new Date().toISOString().split('T')[0],
     location:    'SHIP-INTL',
     associate:   'WEB',
@@ -136,7 +129,6 @@ async function submitCheckout(e) {
     customer,
     lines: cartSnapshot,
   };
-  localStorage.setItem('rusti_pending_order', JSON.stringify(pendingOrder));
 
   btn.disabled = true;
   btn.textContent = 'Redirecting to payment…';
@@ -145,14 +137,17 @@ async function submitCheckout(e) {
     const res = await fetch('/api/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cartItems: cartSnapshot, customer, orderCode }),
+      body: JSON.stringify({ cartItems: cartSnapshot, customer }),
     });
 
     if (!res.ok) {
       // §1 rule 9 — show vague message; server logs the detail
       throw new Error('server error');
     }
-    const { url } = await res.json();
+    const { url, orderCode } = await res.json();
+    // Persist the server-assigned code so the success page can match this order.
+    pendingOrder.orderCode = orderCode;
+    localStorage.setItem('rusti_pending_order', JSON.stringify(pendingOrder));
     cart = [];
     saveCart();
     window.location.href = url;
